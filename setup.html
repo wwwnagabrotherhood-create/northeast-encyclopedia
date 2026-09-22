@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Secure Setup - NE</title>
+<style>
+body{background:#0f172a;color:white;font-family:system-ui;padding:20px;max-width:420px;margin:0 auto}
+.card{background:#1e293b;padding:22px;border-radius:16px;margin-top:20px}
+input{width:100%;padding:14px;margin:10px 0;border-radius:10px;border:1px solid #334155;background:#0f172a;color:white;font-size:16px;box-sizing:border-box}
+button{width:100%;padding:16px;background:#6366f1;color:white;border:none;border-radius:12px;font-size:18px;font-weight:bold;margin-top:15px;cursor:pointer}
+button:disabled{opacity:0.5}
+#log{background:#0f172a;padding:15px;border-radius:10px;margin-top:20px;white-space:pre-wrap;word-break:break-all;font-family:monospace;font-size:13px;border:1px solid #334155}
+.ok{color:#4ade80}
+.err{color:#f87171}
+small{color:#94a3b8}
+.lock{font-size:48px;text-align:center;margin:20px 0}
+</style>
+</head>
+<body>
+<div class="lock">🔒</div>
+<h2 style="text-align:center">Set Your Secret Password</h2>
+<p style="text-align:center"><small>100% Private • Runs only on your device → your Cloudflare KV<br>Password never sent to anyone else</small></p>
+
+<div class="card">
+<label><small>SETUP_TOKEN (from Cloudflare env)</small></label>
+<input id="token" type="password" value="" placeholder="Your real SETUP_TOKEN from Cloudflare">
+
+<label><small>Username</small></label>
+<input id="user" value="benjamin">
+
+<label><small>New SECRET Password (min 8 chars)</small></label>
+<input id="pass" type="password" placeholder="Type your secret password">
+
+<label><small>Confirm Secret Password</small></label>
+<input id="pass2" type="password" placeholder="Confirm">
+
+<button id="btn" onclick="createAdmin()">🔐 Create My Secret Login</button>
+
+<div id="log">Ready.
+1. Keep token as is (matches Cloudflare)
+2. Type your SECRET password only you know
+3. Tap Create
+
+Your password goes directly to YOUR site's KV (Cloudflare), nowhere else.</div>
+</div>
+
+<script>
+async function createAdmin(){
+  const log=document.getElementById('log');
+  const btn=document.getElementById('btn');
+  const token=document.getElementById('token').value.trim();
+  const username=document.getElementById('user').value.trim().toLowerCase();
+  const p1=document.getElementById('pass').value;
+  const p2=document.getElementById('pass2').value;
+  
+  if(!token){log.innerHTML='<span class=err>Enter SETUP_TOKEN</span>';return;}
+  if(!username){log.innerHTML='<span class=err>Enter username</span>';return;}
+  if(p1.length<8){log.innerHTML='<span class=err>Password must be at least 8 characters</span>';return;}
+  if(p1!==p2){log.innerHTML='<span class=err>Passwords do not match</span>';return;}
+  
+  btn.disabled=true; btn.textContent='Creating...';
+  log.textContent='Sending securely to YOUR Cloudflare KV...\n\nThis request goes to:\n'+location.origin+'/api/setup\nOnly your Cloudflare can read it.\n\nCreating...';
+  
+  try{
+    const res=await fetch('/api/setup',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({setupToken:token,username,newPassword:p1,confirmPassword:p2})
+    });
+    const text=await res.text();
+    let data;
+    try{data=JSON.parse(text);}catch(e){data={raw:text}}
+    
+    if(res.ok && data.success){
+      log.innerHTML='<span class=ok>✅ SUCCESS! Your secret password is now set in KV.\n\n</span>'+JSON.stringify(data,null,2)+'\n\n👉 Now go to homepage:\n'+location.origin+'\nLogin with:\nUsername: '+username+'\nPassword: [your secret]\n\n⚠️ IMPORTANT: Old demo password BenYanthan2024! will STOP working.\nOnly YOUR secret works now.\n\nDelete this setup.html file after success for security.';
+      btn.textContent='✅ Done - Go to Homepage';
+      btn.onclick=()=>location.href='/';
+      // Clear password fields
+      document.getElementById('pass').value='';
+      document.getElementById('pass2').value='';
+    }else{
+      log.innerHTML='<span class=err>❌ FAILED (Status '+res.status+'):</span>\n'+JSON.stringify(data,null,2)+'\n\nCommon fixes:\n1. Check KV binding NE_USERS_KV exists\n2. Check SETUP_TOKEN in Cloudflare > Settings > Environment Variables matches input\n3. Redeploy after adding KV/token';
+      btn.disabled=false; btn.textContent='🔐 Create My Secret Login';
+    }
+  }catch(err){
+    log.innerHTML='<span class=err>❌ Failed to fetch: '+err.message+'\n\nThis happens if:\n1. You opened this as local file (content://) - Must be at '+location.origin+'/setup.html\n2. Functions not deployed - re-upload full folder\n3. No internet</span>';
+    btn.disabled=false; btn.textContent='🔐 Create My Secret Login';
+  }
+}
+</script>
+</body>
+</html>
