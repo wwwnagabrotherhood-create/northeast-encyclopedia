@@ -132,6 +132,7 @@ function qi(){let[e,n]=G.useState(M1),[t,r]=G.useState(!1),[neContributor,setNeC
 // D1-backed (read via /api/admin/settings, written via /api/admin/settings/save
 // under the single key "studioConfig") — never persisted to localStorage.
 [neStudioTab,setNeStudioTab]=G.useState("HOME"),
+[neDesignSelectedSection,setNeDesignSelectedSection]=G.useState("quickCategories"),
 [neStudioConfig,setNeStudioConfig]=G.useState(null),
 [neStudioLoading,setNeStudioLoading]=G.useState(!1),
 [neStudioSaveMsg,setNeStudioSaveMsg]=G.useState(""),
@@ -459,6 +460,30 @@ G.useEffect(()=>{
 let [neStudioEditDesignId,setNeStudioEditDesignId]=G.useState(null);
 let neStudioHD=()=>(neStudioConfig&&neStudioConfig.homepageDesigns&&Array.isArray(neStudioConfig.homepageDesigns.designs))?neStudioConfig.homepageDesigns:{designs:[],activeDesignId:null};
 let neStudioEditDesign=()=>neStudioHD().designs.find((d)=>d&&d.id===neStudioEditDesignId)||null;
+G.useEffect(()=>{setNeDesignSelectedSection("quickCategories");},[neStudioEditDesignId]);
+G.useEffect(()=>{
+  const d=neStudioEditDesign();
+  const sv=d&&d.sectionVisuals&&d.sectionVisuals[neDesignSelectedSection]&&typeof d.sectionVisuals[neDesignSelectedSection]==="object"?d.sectionVisuals[neDesignSelectedSection]:{};
+  setNeBulkShape(sv.shape||"default");
+  setNeBulkSize(sv.size||"default");
+  setNeBulkSizeCustomHeight(sv.sizeCustom&&typeof sv.sizeCustom.height==="number"?sv.sizeCustom.height:48);
+  setNeBulkWidth(sv.widthPercent!==undefined&&sv.widthPercent!==null?String(sv.widthPercent):"");
+  setNeBulkTall(sv.boxTallPx!==undefined&&sv.boxTallPx!==null?String(sv.boxTallPx):"");
+  setNeBulkOrient(sv.orientation||"default");
+  setNeBulkFontSize(sv.fontSize||"default");
+  setNeBulkFontSizeCustomPx(sv.fontSizeCustom&&typeof sv.fontSizeCustom.fontSize==="number"?sv.fontSizeCustom.fontSize:13);
+  setNeBulkFontColor(sv.fontColor||"default");
+  setNeBulkFontColorCustomHex(sv.fontColorCustom||"");
+  setNeBulkColor(sv.color||"default");
+  setNeBulkColorCustomHex(sv.colorCustom||"");
+  setNeBulkFontFamily(sv.fontFamily||"default");
+  setNeBulkBold(sv.bold==="on"?"on":"default");
+  setNeBulkItalic(sv.italic==="on"?"on":"default");
+  setNeBulkUnderline(sv.underline==="on"?"on":"default");
+  setNeBulkLetterSpacing(sv.letterSpacing!==undefined&&sv.letterSpacing!==null?String(sv.letterSpacing):"");
+  setNeBulkTextAlign(sv.textAlign||"default");
+  setNeBulkColumns(sv.columns!==undefined&&sv.columns!==null?String(sv.columns):"default");
+},[neDesignSelectedSection,neStudioEditDesignId]);
 // Round 14: design preview popup. neStudioPreviewDesign holds the SAME
 // {activeDesignId,sections,...,sectionVisuals,...} shape
 // neGetPublicHomeDesign expects -- built client-side from a draft design's
@@ -3849,11 +3874,18 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
             ]});
           };
           return c("div",{className:"mt-4",children:[
+            i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide",children:"Select Section"}),
+            i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Select one section and edit its settings. The selected section stays selected while you edit controls or switch to another section."}),
+            c("select",{value:neDesignSelectedSection,onChange:(ev)=>setNeDesignSelectedSection(ev.target.value),className:"mt-2 w-full h-10 px-3 rounded-lg border text-[13px]",children:[
+              {key:"hero",label:"Hero / Banner"},{key:"quickActions",label:"Quick Action Buttons"},{key:"dailyNews",label:"Daily Northeast News"},{key:"quickCategories",label:"Quick Categories Grid"},{key:"featured",label:"Today's Featured"},{key:"exploreByTopic",label:"Explore by Topic"},{key:"allCategories",label:"All Categories"}
+            ].map((opt)=>i("option",{key:opt.key,value:opt.key,children:opt.label}))}),
+            i("p",{className:"mt-2 text-[11px] text-gray-500",children:"Editing: "+(({hero:"Hero / Banner",quickActions:"Quick Action Buttons",dailyNews:"Daily Northeast News",quickCategories:"Quick Categories Grid",featured:"Today's Featured",exploreByTopic:"Explore by Topic",allCategories:"All Categories"})[neDesignSelectedSection]||neDesignSelectedSection)}),
+            i("p",{className:"mt-2 text-[11px] text-gray-400",children:"The controls below now apply directly to the selected section. Existing multi-section checklists remain available for bulk changes."}),
             i("p",{className:"text-[11px] text-gray-400",children:"Pick a value for each control below, then tick which section(s) it should apply to. Unticking a section resets ONLY that control, for that section, back to today's default — every other control and every other section stays untouched."}),
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Box Shape"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Presentation only — never changes category data or how many items appear. None keeps today's exact appearance for a ticked section."}),
-            c("select",{value:neBulkShape,onChange:(ev)=>setNeBulkShape(ev.target.value),className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
+            c("select",{value:neBulkShape,onChange:(ev)=>{const v=ev.target.value;setNeBulkShape(v);neSetSectionCategoryShape(neDesignSelectedSection,v);},className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
               i("option",{value:"default",children:"None (today's shape)"}),
               i("option",{value:"round",children:"Round"}),i("option",{value:"oval",children:"Oval"}),
               i("option",{value:"rectangle",children:"Rectangle"}),i("option",{value:"square",children:"Square"}),
@@ -3863,7 +3895,7 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Size"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Responsive on desktop and mobile. None keeps today's exact size for a ticked section."}),
-            c("select",{value:neBulkSize,onChange:(ev)=>setNeBulkSize(ev.target.value),className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
+            c("select",{value:neBulkSize,onChange:(ev)=>{const v=ev.target.value;setNeBulkSize(v);neSetSectionCategorySize(neDesignSelectedSection,v);},className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
               i("option",{value:"default",children:"None (Standard)"}),
               i("option",{value:"smaller",children:"Smaller"}),i("option",{value:"standard",children:"Standard"}),
               i("option",{value:"medium",children:"Medium"}),i("option",{value:"large",children:"Large"}),
@@ -3871,14 +3903,14 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
             ]}),
             neBulkSize==="custom" && c("div",{className:"mt-2 flex gap-2 items-center",children:[
               i("span",{className:"text-[11px] text-gray-500",children:"Height (px)"}),
-              i("input",{type:"number",value:neBulkSizeCustomHeight,onChange:(ev)=>setNeBulkSizeCustomHeight(Number(ev.target.value)||48),className:"w-20 h-8 px-2 rounded border text-[12px]"})
+              i("input",{type:"number",value:neBulkSizeCustomHeight,onChange:(ev)=>{const v=Number(ev.target.value)||48;setNeBulkSizeCustomHeight(v);neSetSectionCategorySizeCustom(neDesignSelectedSection,{height:v});},className:"w-20 h-8 px-2 rounded border text-[12px]"})
             ]}),
             neChecklistFor("size",neBulkSize,(key)=>{ neSetSectionCategorySize(key,neBulkSize); if(neBulkSize==="custom") neSetSectionCategorySizeCustom(key,{height:neBulkSizeCustomHeight}); },(key)=>neSetSectionCategorySize(key,"default")),
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Box width"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Shrinks and centers the whole selected section (1-100%). Leave blank for the existing full width."}),
             c("div",{className:"mt-2 flex gap-2 items-center",children:[
-              i("input",{type:"number",min:1,max:100,value:neBulkWidth,placeholder:"100",onChange:(ev)=>setNeBulkWidth(ev.target.value),className:"w-20 h-8 px-2 rounded border text-[12px]"}),
+              i("input",{type:"number",min:1,max:100,value:neBulkWidth,placeholder:"100",onChange:(ev)=>{const v=ev.target.value;setNeBulkWidth(v);neSetSectionWidth(neDesignSelectedSection,v);},className:"w-20 h-8 px-2 rounded border text-[12px]"}),
               i("span",{className:"text-[11px] text-gray-500",children:"%"})
             ]}),
             neChecklistFor("widthPercent",neBulkWidth,(key)=>neSetSectionWidth(key,neBulkWidth),(key)=>neSetSectionWidth(key,"")),
@@ -3886,14 +3918,14 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Box Tall"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Minimum box height in pixels. Leave blank to keep the existing height."}),
             c("div",{className:"mt-2 flex gap-2 items-center",children:[
-              i("input",{type:"number",min:24,max:800,value:neBulkTall,placeholder:"Auto",onChange:(ev)=>setNeBulkTall(ev.target.value),className:"w-24 h-8 px-2 rounded border text-[12px]"}),
+              i("input",{type:"number",min:24,max:800,value:neBulkTall,placeholder:"Auto",onChange:(ev)=>{const v=ev.target.value;setNeBulkTall(v);neSetSectionTall(neDesignSelectedSection,v);},className:"w-24 h-8 px-2 rounded border text-[12px]"}),
               i("span",{className:"text-[11px] text-gray-500",children:"px"})
             ]}),
             neChecklistFor("boxTallPx",neBulkTall,(key)=>neSetSectionTall(key,neBulkTall),(key)=>neSetSectionTall(key,"")),
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Orientation"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Horizontal and Swipe both use native touch-friendly horizontal scrolling (no carousel library). None keeps today's existing layout for a ticked section — for single-item sections (Hero, Daily News) Orientation has no visible effect."}),
-            c("select",{value:neBulkOrient,onChange:(ev)=>setNeBulkOrient(ev.target.value),className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
+            c("select",{value:neBulkOrient,onChange:(ev)=>{const v=ev.target.value;setNeBulkOrient(v);neSetSectionCategoryOrientation(neDesignSelectedSection,v);},className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
               i("option",{value:"default",children:"None (existing layout)"}),
               i("option",{value:"vertical",children:"Vertical"}),i("option",{value:"horizontal",children:"Horizontal"}),
               i("option",{value:"swipe",children:"Swipe"})
@@ -3902,7 +3934,7 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Columns"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Quick Categories Grid, Explore by Topic, and Today's Featured are already grids. All Categories is normally a list of full-width rows — picking a column count here switches it into a tile grid like Explore by Topic; leaving it at None keeps it as rows. The count chosen here applies at every screen width, including mobile. Has no visible effect on a section whose Orientation is set to Horizontal or Swipe."}),
-            c("select",{value:neBulkColumns,onChange:(ev)=>setNeBulkColumns(ev.target.value),className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
+            c("select",{value:neBulkColumns,onChange:(ev)=>{const v=ev.target.value;setNeBulkColumns(v);neSetSectionColumns(neDesignSelectedSection,v);},className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
               i("option",{value:"default",children:"None (today's columns)"}),
               i("option",{value:"1",children:"1"}),i("option",{value:"2",children:"2"}),i("option",{value:"3",children:"3"}),
               i("option",{value:"4",children:"4"}),i("option",{value:"5",children:"5"}),i("option",{value:"6",children:"6"})
@@ -3911,7 +3943,7 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Text Font Size"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"None keeps today's exact text size for a ticked section."}),
-            c("select",{value:neBulkFontSize,onChange:(ev)=>setNeBulkFontSize(ev.target.value),className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
+            c("select",{value:neBulkFontSize,onChange:(ev)=>{const v=ev.target.value;setNeBulkFontSize(v);neSetSectionFontSize(neDesignSelectedSection,v);},className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
               i("option",{value:"default",children:"None (today's text size)"}),
               i("option",{value:"small",children:"Small"}),i("option",{value:"standard",children:"Standard"}),
               i("option",{value:"medium",children:"Medium"}),i("option",{value:"large",children:"Large"}),
@@ -3919,13 +3951,13 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
             ]}),
             neBulkFontSize==="custom" && c("div",{className:"mt-2 flex gap-2 items-center",children:[
               i("span",{className:"text-[11px] text-gray-500",children:"Font (px)"}),
-              i("input",{type:"number",value:neBulkFontSizeCustomPx,onChange:(ev)=>setNeBulkFontSizeCustomPx(Number(ev.target.value)||13),className:"w-20 h-8 px-2 rounded border text-[12px]"})
+              i("input",{type:"number",value:neBulkFontSizeCustomPx,onChange:(ev)=>{const v=Number(ev.target.value)||13;setNeBulkFontSizeCustomPx(v);neSetSectionFontSizeCustom(neDesignSelectedSection,{fontSize:v});},className:"w-20 h-8 px-2 rounded border text-[12px]"})
             ]}),
             neChecklistFor("fontSize",neBulkFontSize,(key)=>{ neSetSectionFontSize(key,neBulkFontSize); if(neBulkFontSize==="custom") neSetSectionFontSizeCustom(key,{fontSize:neBulkFontSizeCustomPx}); },(key)=>neSetSectionFontSize(key,"default"),NE_TEXT_STYLE_SECTION_OPTIONS),
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Text Font Colour"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"The TEXT colour, separate from the box's background Colour below. None keeps today's exact text colour for a ticked section."}),
-            c("select",{value:neBulkFontColor,onChange:(ev)=>setNeBulkFontColor(ev.target.value),className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
+            c("select",{value:neBulkFontColor,onChange:(ev)=>{const v=ev.target.value;setNeBulkFontColor(v);neSetSectionFontColor(neDesignSelectedSection,v);if(v!=="custom")neSetSectionFontColorCustom(neDesignSelectedSection,"");},className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
               i("option",{value:"default",children:"None (today's text colour)"}),
               ...NE_SECTION_COLORS.map((cc)=>i("option",{key:cc.key,value:cc.key,children:cc.label})),
               i("option",{value:"custom",children:"Custom"})
@@ -3945,7 +3977,7 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
                 // "hex field noticeably very small and short" -- both
                 // classes re-confirmed compiled in the static stylesheet
                 // before use, per the standing Tailwind rule.
-                i("input",{type:"text",value:neBulkFontColorCustomHex,onChange:(ev)=>setNeBulkFontColorCustomHex(ev.target.value),placeholder:"#1a237e",className:"flex-1 h-11 px-3 rounded-lg border text-[16px]"})
+                i("input",{type:"text",value:neBulkFontColorCustomHex,onChange:(ev)=>{const v=ev.target.value;setNeBulkFontColorCustomHex(v);neSetSectionFontColorCustom(neDesignSelectedSection,v);},placeholder:"#1a237e",className:"flex-1 h-11 px-3 rounded-lg border text-[16px]"})
               ]}),
               // Round 10: replaces the small native swatch with the full
               // drag picker (gradient square + hue rail) the user asked
@@ -3953,13 +3985,13 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
               // hex field above, same as that reference -- the drag picker
               // is for visually exploring a colour, the hex field is for
               // typing/pasting an exact one; neither replaces the other.
-              i(NeColorDragPicker,{value:neBulkFontColorCustomHex,onChange:setNeBulkFontColorCustomHex})
+              i(NeColorDragPicker,{value:neBulkFontColorCustomHex,onChange:(v)=>{setNeBulkFontColorCustomHex(v);neSetSectionFontColorCustom(neDesignSelectedSection,v);}})
             ]}),
             neChecklistFor("fontColor",neBulkFontColor,(key)=>{ neSetSectionFontColor(key,neBulkFontColor); if(neBulkFontColor==="custom") neSetSectionFontColorCustom(key,neBulkFontColorCustomHex); },(key)=>neSetSectionFontColor(key,"default"),NE_TEXT_STYLE_SECTION_OPTIONS),
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Box Colour"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"None keeps today's exact colour for a ticked section. Note: once a section's Shape is set to No Box, its background stays transparent no matter what Colour is ticked here — change that section's Shape away from No Box first if you want a Colour fill back."}),
-            c("select",{value:neBulkColor,onChange:(ev)=>setNeBulkColor(ev.target.value),className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
+            c("select",{value:neBulkColor,onChange:(ev)=>{const v=ev.target.value;setNeBulkColor(v);neSetSectionColor(neDesignSelectedSection,v);if(v!=="custom")neSetSectionColorCustom(neDesignSelectedSection,"");},className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
               i("option",{value:"default",children:"None (today's colour)"}),
               ...NE_SECTION_COLORS.map((cc)=>i("option",{key:cc.key,value:cc.key,children:cc.label})),
               i("option",{value:"custom",children:"Custom"})
@@ -3967,9 +3999,9 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
             neBulkColor==="custom" && c("div",{className:"mt-2",children:[
               c("div",{className:"flex gap-2 items-center",children:[
                 i("span",{className:"text-[11px] text-gray-500",children:"Hex"}),
-                i("input",{type:"text",value:neBulkColorCustomHex,onChange:(ev)=>setNeBulkColorCustomHex(ev.target.value),placeholder:"#1a237e",className:"flex-1 h-11 px-3 rounded-lg border text-[16px]"})
+                i("input",{type:"text",value:neBulkColorCustomHex,onChange:(ev)=>{const v=ev.target.value;setNeBulkColorCustomHex(v);neSetSectionColorCustom(neDesignSelectedSection,v);},placeholder:"#1a237e",className:"flex-1 h-11 px-3 rounded-lg border text-[16px]"})
               ]}),
-              i(NeColorDragPicker,{value:neBulkColorCustomHex,onChange:setNeBulkColorCustomHex})
+              i(NeColorDragPicker,{value:neBulkColorCustomHex,onChange:(v)=>{setNeBulkColorCustomHex(v);neSetSectionColorCustom(neDesignSelectedSection,v);}})
             ]}),
             neChecklistFor("color",neBulkColor,(key)=>{ neSetSectionColor(key,neBulkColor); if(neBulkColor==="custom") neSetSectionColorCustom(key,neBulkColorCustomHex); },(key)=>neSetSectionColor(key,"default"),NE_TEXT_STYLE_SECTION_OPTIONS),
 
@@ -3993,18 +4025,18 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
             // by styling <option> harder). NeFontFamilyDropdown is built
             // from plain styled <div>s instead, so each row is a normal
             // element the browser actually paints in its own font.
-            i(NeFontFamilyDropdown,{value:neBulkFontFamily,onChange:setNeBulkFontFamily}),
+            i(NeFontFamilyDropdown,{value:neBulkFontFamily,onChange:(v)=>{setNeBulkFontFamily(v);neSetSectionFontStyleBundle(neDesignSelectedSection,v,neBulkBold,neBulkItalic,neBulkUnderline);}}),
             c("div",{className:"mt-2 flex gap-4",children:[
               c("label",{className:"flex items-center gap-1.5 text-[13px] cursor-pointer select-none",children:[
-                i("input",{type:"checkbox",checked:neBulkBold==="on",onChange:(ev)=>setNeBulkBold(ev.target.checked?"on":"default"),className:"h-4 w-4"}),
+                i("input",{type:"checkbox",checked:neBulkBold==="on",onChange:(ev)=>{const v=ev.target.checked?"on":"default";setNeBulkBold(v);neSetSectionFontStyleBundle(neDesignSelectedSection,neBulkFontFamily,v,neBulkItalic,neBulkUnderline);},className:"h-4 w-4"}),
                 i("span",{children:"Bold"})
               ]}),
               c("label",{className:"flex items-center gap-1.5 text-[13px] cursor-pointer select-none",children:[
-                i("input",{type:"checkbox",checked:neBulkItalic==="on",onChange:(ev)=>setNeBulkItalic(ev.target.checked?"on":"default"),className:"h-4 w-4"}),
+                i("input",{type:"checkbox",checked:neBulkItalic==="on",onChange:(ev)=>{const v=ev.target.checked?"on":"default";setNeBulkItalic(v);neSetSectionFontStyleBundle(neDesignSelectedSection,neBulkFontFamily,neBulkBold,v,neBulkUnderline);},className:"h-4 w-4"}),
                 i("span",{children:"Italic"})
               ]}),
               c("label",{className:"flex items-center gap-1.5 text-[13px] cursor-pointer select-none",children:[
-                i("input",{type:"checkbox",checked:neBulkUnderline==="on",onChange:(ev)=>setNeBulkUnderline(ev.target.checked?"on":"default"),className:"h-4 w-4"}),
+                i("input",{type:"checkbox",checked:neBulkUnderline==="on",onChange:(ev)=>{const v=ev.target.checked?"on":"default";setNeBulkUnderline(v);neSetSectionFontStyleBundle(neDesignSelectedSection,neBulkFontFamily,neBulkBold,neBulkItalic,v);},className:"h-4 w-4"}),
                 i("span",{children:"Underline"})
               ]})
             ]}),
@@ -4052,14 +4084,14 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Letter Spacing"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"In pixels, -5 to 20. Leave blank for today's default spacing."}),
             c("div",{className:"mt-2 flex gap-2 items-center",children:[
-              i("input",{type:"number",min:-5,max:20,value:neBulkLetterSpacing,placeholder:"0",onChange:(ev)=>setNeBulkLetterSpacing(ev.target.value),className:"w-20 h-8 px-2 rounded border text-[12px]"}),
+              i("input",{type:"number",min:-5,max:20,value:neBulkLetterSpacing,placeholder:"0",onChange:(ev)=>{const v=ev.target.value;setNeBulkLetterSpacing(v);neSetSectionLetterSpacing(neDesignSelectedSection,v);},className:"w-20 h-8 px-2 rounded border text-[12px]"}),
               i("span",{className:"text-[11px] text-gray-500",children:"px"})
             ]}),
             neChecklistFor("letterSpacing",neBulkLetterSpacing,(key)=>neSetSectionLetterSpacing(key,neBulkLetterSpacing),(key)=>neSetSectionLetterSpacing(key,""),NE_TEXT_STYLE_SECTION_OPTIONS),
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Text Align"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"None keeps today's exact alignment for a ticked section."}),
-            c("select",{value:neBulkTextAlign,onChange:(ev)=>setNeBulkTextAlign(ev.target.value),className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
+            c("select",{value:neBulkTextAlign,onChange:(ev)=>{const v=ev.target.value;setNeBulkTextAlign(v);neSetSectionTextAlign(neDesignSelectedSection,v);},className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
               i("option",{value:"default",children:"None (today's alignment)"}),
               i("option",{value:"left",children:"Left"}),i("option",{value:"center",children:"Center"}),i("option",{value:"right",children:"Right"})
             ]}),
