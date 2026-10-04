@@ -291,7 +291,23 @@ async function verifyGoogleIdToken(idToken, expectedClientId){
 }
 
 // --- D1 Helpers ---
+// Performance/limits fix: the schema setup below issues ~75 D1 statements.
+// It used to run on EVERY API request (including the 30-second visitor
+// heartbeat), which burns CPU and D1 query budget and can push a request
+// over Cloudflare's per-request limits (Cloudflare then returns a bare 503).
+// It now runs once per Worker instance; all statements are idempotent
+// (CREATE IF NOT EXISTS / ALTER ADD COLUMN), so the result is identical.
+let neD1InitPromise = null;
 async function initD1Tables(d1){
+  if(!neD1InitPromise){
+    neD1InitPromise = initD1TablesRun(d1).then((res)=>{
+      if(!res || res.ok===false) neD1InitPromise = null; // retry next request if setup itself failed
+      return res;
+    }).catch((e)=>{ neD1InitPromise = null; return {ok:false, errors:[{stmt:'(outer)', error: e && e.message}]}; });
+  }
+  return neD1InitPromise;
+}
+async function initD1TablesRun(d1){
   try{
     const statements = `-- Northeast Encyclopedia D1 Schema
 -- Database name: northeast-encyclopedia-d1
