@@ -2603,6 +2603,9 @@ export default {
                     // together, via its existing order-style wrapper),
                     // independent of shape/size/colour.
                     if(typeof sv.widthPercent==='number' && sv.widthPercent>=1 && sv.widthPercent<=100) clean.widthPercent = sv.widthPercent;
+                    // LIVE correction: Box Tall is persisted as a bounded
+                    // per-section minimum height, paired with Box width.
+                    if(typeof sv.boxTallPx==='number' && sv.boxTallPx>=24 && sv.boxTallPx<=800) clean.boxTallPx = sv.boxTallPx;
                     // Round 9: Font Family + text styling (Bold/Italic/
                     // Underline/Letter Spacing/Text Align) + Columns, same
                     // narrowing discipline as every field above -- only a
