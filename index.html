@@ -144,6 +144,7 @@ function qi(){let[e,n]=G.useState(M1),[t,r]=G.useState(!1),[neContributor,setNeC
 [neBulkSize,setNeBulkSize]=G.useState("default"),
 [neBulkSizeCustomHeight,setNeBulkSizeCustomHeight]=G.useState(48),
 [neBulkWidth,setNeBulkWidth]=G.useState(""),
+[neBulkTall,setNeBulkTall]=G.useState(""),
 [neBulkOrient,setNeBulkOrient]=G.useState("default"),
 [neBulkFontSize,setNeBulkFontSize]=G.useState("default"),
 [neBulkFontSizeCustomPx,setNeBulkFontSizeCustomPx]=G.useState(13),
@@ -657,6 +658,18 @@ let neSetSectionWidth=(sectionKey,val)=>neUpdateEditDesign((d)=>{
   sv[sectionKey]=cur;
   return {...d,sectionVisuals:sv};
 });
+// Live correction: Box Tall is an independent per-section minimum height,
+// persisted in the same sectionVisuals object as Box width. Blank/default
+// clears it; bounded pixels prevent accidental extreme layouts.
+let neSetSectionTall=(sectionKey,val)=>neUpdateEditDesign((d)=>{
+  const sv={...(d.sectionVisuals||{})};
+  const cur={...(sv[sectionKey]||{})};
+  const n=Number(val);
+  if(val===""||!Number.isFinite(n)) delete cur.boxTallPx;
+  else cur.boxTallPx=Math.max(24,Math.min(800,Math.round(n)));
+  sv[sectionKey]=cur;
+  return {...d,sectionVisuals:sv};
+});
 // Round 9: Font Family + text styling (Bold/Italic/Underline/Letter
 // Spacing/Text Align) + Columns setters, same per-section sectionVisuals
 // mechanism and "default clears the override" contract as every setter
@@ -747,7 +760,9 @@ let neGetSectionVisualField=(d,sectionKey,field)=>{
   if(sv&&typeof sv==="object"&&sv[field]!==undefined) return sv[field];
   return d?d["category"+field.charAt(0).toUpperCase()+field.slice(1)]:undefined;
 };
-let neNavIsPopRef=G.useRef(false);G.useEffect(()=>{try{history.replaceState({type:"home"},"","")}catch(err){}const onPop=(ev)=>{neNavIsPopRef.current=true;f(ev.state||{type:"home"})};window.addEventListener("popstate",onPop);return()=>window.removeEventListener("popstate",onPop)},[]);G.useEffect(()=>{if(neNavIsPopRef.current){neNavIsPopRef.current=false;return}try{history.pushState(o,"","")}catch(err){}},[o]);
+let neNavIsPopRef=G.useRef(false);
+let neAllDataLoadStartedRef=G.useRef(false);
+G.useEffect(()=>{try{history.replaceState({type:"home"},"","")}catch(err){}const onPop=(ev)=>{neNavIsPopRef.current=true;f(ev.state||{type:"home"})};window.addEventListener("popstate",onPop);return()=>window.removeEventListener("popstate",onPop)},[]);G.useEffect(()=>{if(neNavIsPopRef.current){neNavIsPopRef.current=false;return}try{history.pushState(o,"","")}catch(err){}},[o]);
 // Issue-1 correction pass: single global scroll-reset, keyed ONLY on
 // o.type (the page/view kind), never on o itself or o.data. This is the
 // deliberate fix for the audited bug: the old scrollTo(0,0) lived only
@@ -762,7 +777,15 @@ let neNavIsPopRef=G.useRef(false);G.useEffect(()=>{try{history.replaceState({typ
 // again with the identical type string, so o.type does not change and no
 // unwanted scroll jump happens mid-task.
 G.useEffect(()=>{window.scrollTo(0,0)},[o.type]);
-G.useEffect(()=>{let a=localStorage.getItem("ne_encyclopedia_db_v1");if(a)try{n(JSON.parse(a))}catch{}let C=localStorage.getItem("ne_current_user");if(C)try{u(JSON.parse(C))}catch{}r(!0)},[]),G.useEffect(()=>{try{const params=new URLSearchParams(window.location.search);if(params.get("neadmin")==="1"){params.delete("neadmin");const cleanUrl=window.location.pathname+(params.toString()?"?"+params.toString():"")+window.location.hash;window.history.replaceState({},"",cleanUrl);}}catch(e){}},[]),G.useEffect(()=>{(async()=>{try{const res=await fetch('/api/d1/articles',{headers:neAuthHeadersSync(),credentials:"include"});const j=await res.json();if(j&&j.staffAuthInvalid)neHandleStaffAuthInvalid();if(j&&j.success&&Array.isArray(j.articles)){const parsed=j.articles.map(function(row){let categories=[],tags=[],references=[],infobox={},relatedIds=[];try{categories=JSON.parse(row.categories||'[]')}catch(e){}try{tags=JSON.parse(row.tags||'[]')}catch(e){}try{references=JSON.parse(row.references_list||'[]')}catch(e){}try{infobox=JSON.parse(row.infobox||'{}')}catch(e){}try{relatedIds=JSON.parse(row.relatedIds||'[]')}catch(e){}return Object.assign({},row,{categories:categories,tags:tags,references:references,infobox:infobox,relatedIds:relatedIds,verified:!!row.verified});});n(function(prev){return Object.assign({},prev,{articles:parsed});});console.log('[D1-READ-V31] Loaded '+parsed.length+' published articles from D1');try{setTimeout(()=>{try{window.dispatchEvent(new Event('ne-d1-articles-synced'))}catch(evErr){}},300)}catch(evErr){}}}catch(e){console.log('[D1-READ-V31] fetch failed, using localStorage only',e)}})()},[l]),G.useEffect(()=>{(async()=>{try{const res=await fetch('/api/d1/all-data',{headers:neAuthHeadersSync(),credentials:"include"});const j=await res.json();if(j&&j.staffAuthInvalid)neHandleStaffAuthInvalid();if(j&&j.success&&j.data&&Array.isArray(j.data.submissions)){const parsedSubs=j.data.submissions.map(function(row){let parsedData={};try{parsedData=typeof row.data==="string"?JSON.parse(row.data):(row.data||{});}catch(e){parsedData={};}return Object.assign({},row,{data:parsedData});});n(function(prev){const map={};(prev.submissions||[]).forEach(function(s){if(s&&s.id)map[s.id]=s;});parsedSubs.forEach(function(s){if(s&&s.id)map[s.id]=s;});return Object.assign({},prev,{submissions:Object.values(map)});});console.log('[SUBMISSIONS-READ] Loaded '+parsedSubs.length+' real pending submissions from D1');}
+G.useEffect(()=>{let a=localStorage.getItem("ne_encyclopedia_db_v1");if(a)try{n(JSON.parse(a))}catch{}let C=localStorage.getItem("ne_current_user");if(C)try{u(JSON.parse(C))}catch{}r(!0)},[]),G.useEffect(()=>{try{const params=new URLSearchParams(window.location.search);if(params.get("neadmin")==="1"){params.delete("neadmin");const cleanUrl=window.location.pathname+(params.toString()?"?"+params.toString():"")+window.location.hash;window.history.replaceState({},"",cleanUrl);}}catch(e){}},[]),G.useEffect(()=>{(async()=>{try{const res=await fetch('/api/d1/articles',{headers:neAuthHeadersSync(),credentials:"include"});const j=await res.json();if(j&&j.staffAuthInvalid)neHandleStaffAuthInvalid();if(j&&j.success&&Array.isArray(j.articles)){const parsed=j.articles.map(function(row){let categories=[],tags=[],references=[],infobox={},relatedIds=[];try{categories=JSON.parse(row.categories||'[]')}catch(e){}try{tags=JSON.parse(row.tags||'[]')}catch(e){}try{references=JSON.parse(row.references_list||'[]')}catch(e){}try{infobox=JSON.parse(row.infobox||'{}')}catch(e){}try{relatedIds=JSON.parse(row.relatedIds||'[]')}catch(e){}return Object.assign({},row,{categories:categories,tags:tags,references:references,infobox:infobox,relatedIds:relatedIds,verified:!!row.verified});});n(function(prev){return Object.assign({},prev,{articles:parsed});});console.log('[D1-READ-V31] Loaded '+parsed.length+' published articles from D1');try{setTimeout(()=>{try{window.dispatchEvent(new Event('ne-d1-articles-synced'))}catch(evErr){}},300)}catch(evErr){}}}catch(e){console.log('[D1-READ-V31] fetch failed, using localStorage only',e)}})()},[l]),G.useEffect(()=>{
+  // Performance correction: the all-data payload is large and the homepage
+  // does not need tribes/people/places/dictionary/revisions/donations just to
+  // render. Super Admin still loads it immediately for the dashboard; other
+  // visitors load it when they actually navigate to a data-heavy view.
+  const needsAllData=!!l || o.type!=="home";
+  if(!needsAllData || neAllDataLoadStartedRef.current) return;
+  neAllDataLoadStartedRef.current=true;
+  (async()=>{try{const res=await fetch('/api/d1/all-data',{headers:neAuthHeadersSync(),credentials:"include"});const j=await res.json();if(j&&j.staffAuthInvalid)neHandleStaffAuthInvalid();if(j&&j.success&&j.data&&Array.isArray(j.data.submissions)){const parsedSubs=j.data.submissions.map(function(row){let parsedData={};try{parsedData=typeof row.data==="string"?JSON.parse(row.data):(row.data||{});}catch(e){parsedData={};}return Object.assign({},row,{data:parsedData});});n(function(prev){const map={};(prev.submissions||[]).forEach(function(s){if(s&&s.id)map[s.id]=s;});parsedSubs.forEach(function(s){if(s&&s.id)map[s.id]=s;});return Object.assign({},prev,{submissions:Object.values(map)});});console.log('[SUBMISSIONS-READ] Loaded '+parsedSubs.length+' real pending submissions from D1');}
 if(j&&j.success&&j.data&&Array.isArray(j.data.dict)){n(function(prev){return Object.assign({},prev,{dict:j.data.dict});});console.log('[DICT-READ] Loaded '+j.data.dict.length+' real dictionary words from D1');}
 if(j&&j.success&&j.data&&Array.isArray(j.data.stories)){n(function(prev){return Object.assign({},prev,{stories:j.data.stories});});console.log('[STORIES-READ] Loaded '+j.data.stories.length+' real stories from D1');}
 if(j&&j.success&&j.data&&Array.isArray(j.data.tribes)){n(function(prev){return Object.assign({},prev,{tribes:j.data.tribes});});console.log('[TRIBES-READ] Loaded '+j.data.tribes.length+' real tribes/communities from D1');}
@@ -770,7 +793,7 @@ if(j&&j.success&&j.data&&Array.isArray(j.data.people)){n(function(prev){return O
 if(j&&j.success&&j.data&&Array.isArray(j.data.places)){n(function(prev){return Object.assign({},prev,{places:j.data.places});});console.log('[PLACES-READ] Loaded '+j.data.places.length+' real places from D1');}
 if(j&&j.success&&j.data&&Array.isArray(j.data.revisions)){n(function(prev){return Object.assign({},prev,{revisions:j.data.revisions});});console.log('[REVISIONS-READ] Loaded '+j.data.revisions.length+' real revisions from D1');}
 if(j&&j.success&&j.data&&Array.isArray(j.data.donations)){n(function(prev){return Object.assign({},prev,{donations:j.data.donations});});console.log('[DONATIONS-READ] Loaded '+j.data.donations.length+' real donations from D1');}
-}catch(e){console.log('[SUBMISSIONS-READ] fetch failed, using local only',e)}})()},[l]),G.useEffect(()=>{if(l&&l.role==='SUPER_ADMIN'){(async()=>{try{const token=localStorage.getItem("ne_auth_token");const res=await fetch("/api/admin/suggestions",{headers:{...(token?{"Authorization":"Bearer "+token}:{})},credentials:"include"});const j=await res.json();if(j&&j.success){setNeSuggestions(j.suggestions||[]);setNeSuggestUnread(j.unreadCount||0)}}catch(e){}})()}},[l]),G.useEffect(()=>{if(t)localStorage.setItem("ne_encyclopedia_db_v1",JSON.stringify(e))},[e,t]),G.useEffect(()=>{if(l)localStorage.setItem("ne_current_user",JSON.stringify(l));else localStorage.removeItem("ne_current_user")},[l]),G.useEffect(()=>{try{localStorage.setItem("ne_font_size",neFontSize)}catch{}},[neFontSize]),G.useEffect(()=>{(async()=>{try{const res=await fetch("/api/d1/media");const j=await res.json();if(j&&j.success&&Array.isArray(j.media))setNeMedia(j.media)}catch(e){}})()},[]),G.useEffect(()=>{(async()=>{try{const res=await fetch("/api/d1/categories?counts=1");const j=await res.json();if(j&&j.success&&Array.isArray(j.categories)&&j.categories.length>0)setNeCategories(j.categories)}catch(e){}finally{setNeCategoriesLoaded(!0)}})()},[]),G.useEffect(()=>{(async()=>{try{const res=await fetch("/api/d1/settings");const j=await res.json();if(j&&j.success&&j.settings&&Object.keys(j.settings).length>0)n((prev)=>({...prev,settings:{...prev.settings,...j.settings}}))}catch(e){}})()},[]),G.useEffect(()=>{if(!l||l.role!=="SUPER_ADMIN"){setNeSuggestions([]);setNeSuggestUnread(0);return}(async()=>{try{const token=localStorage.getItem("ne_auth_token");const res=await fetch("/api/admin/suggestions",{headers:{...(token?{"Authorization":"Bearer "+token}:{})},credentials:"include"});const j=await res.json();if(j&&j.success){setNeSuggestions(j.suggestions||[]);setNeSuggestUnread(j.unreadCount||0)}}catch(e){}})()},[l]),G.useEffect(()=>{try{localStorage.setItem("ne_color_mode",neColorMode)}catch{}},[neColorMode]),G.useEffect(()=>{
+}catch(e){neAllDataLoadStartedRef.current=false;console.log('[SUBMISSIONS-READ] fetch failed, using local only',e)}})()},[l,o.type]),G.useEffect(()=>{if(l&&l.role==='SUPER_ADMIN'){(async()=>{try{const token=localStorage.getItem("ne_auth_token");const res=await fetch("/api/admin/suggestions",{headers:{...(token?{"Authorization":"Bearer "+token}:{})},credentials:"include"});const j=await res.json();if(j&&j.success){setNeSuggestions(j.suggestions||[]);setNeSuggestUnread(j.unreadCount||0)}}catch(e){}})()}},[l]),G.useEffect(()=>{if(t)localStorage.setItem("ne_encyclopedia_db_v1",JSON.stringify(e))},[e,t]),G.useEffect(()=>{if(l)localStorage.setItem("ne_current_user",JSON.stringify(l));else localStorage.removeItem("ne_current_user")},[l]),G.useEffect(()=>{try{localStorage.setItem("ne_font_size",neFontSize)}catch{}},[neFontSize]),G.useEffect(()=>{(async()=>{try{const res=await fetch("/api/d1/media");const j=await res.json();if(j&&j.success&&Array.isArray(j.media))setNeMedia(j.media)}catch(e){}})()},[]),G.useEffect(()=>{(async()=>{try{const res=await fetch("/api/d1/categories?counts=1");const j=await res.json();if(j&&j.success&&Array.isArray(j.categories)&&j.categories.length>0)setNeCategories(j.categories)}catch(e){}finally{setNeCategoriesLoaded(!0)}})()},[]),G.useEffect(()=>{(async()=>{try{const res=await fetch("/api/d1/settings");const j=await res.json();if(j&&j.success&&j.settings&&Object.keys(j.settings).length>0)n((prev)=>({...prev,settings:{...prev.settings,...j.settings}}))}catch(e){}})()},[]),G.useEffect(()=>{if(!l||l.role!=="SUPER_ADMIN"){setNeSuggestions([]);setNeSuggestUnread(0);return}(async()=>{try{const token=localStorage.getItem("ne_auth_token");const res=await fetch("/api/admin/suggestions",{headers:{...(token?{"Authorization":"Bearer "+token}:{})},credentials:"include"});const j=await res.json();if(j&&j.success){setNeSuggestions(j.suggestions||[]);setNeSuggestUnread(j.unreadCount||0)}}catch(e){}})()},[l]),G.useEffect(()=>{try{localStorage.setItem("ne_color_mode",neColorMode)}catch{}},[neColorMode]),G.useEffect(()=>{
   if(!l||l.role!=="SUPER_ADMIN"){setNeLiveContributorCount(null);return}
   (async()=>{
     try{
@@ -1973,6 +1996,9 @@ function neHomeSectionOrderStyle(design,key){
       style.marginLeft="auto";
       style.marginRight="auto";
     }
+    if(sv&&typeof sv.boxTallPx==="number"&&sv.boxTallPx>=24&&sv.boxTallPx<=800){
+      style.minHeight=sv.boxTallPx+"px";
+    }
     return Object.keys(style).length>0?style:undefined;
   }catch(err){ return undefined; }
 }
@@ -2284,6 +2310,10 @@ neContributor&&i("button",{onClick:()=>{setNeContributor(null);try{localStorage.
   // see neTitleStyle/NE_TITLE_OPTIONS above). Body1/body2 stay exactly as
   // Round 8/9 left them.
   const heroTitleTitleStyle=neTitleStyle("heroTitle");
+  // LIVE safety: the banner title is fixed site identity, not content loaded
+  // from a category or D1 label. Keep the exact public title independent of
+  // the selected category (including Local Media) and of Studio projection.
+  const heroBannerTitle="Northeast Encyclopedia";
   heroTitleStyle={...heroTitleStyle,...heroTitleTitleStyle.style};
   heroBody1Style={...heroBody1Style,...heroFontColorStyle,...heroFontExtraStyle};
   heroBody2Style={...heroBody2Style,...heroFontColorStyle,...heroFontExtraStyle};
@@ -2322,7 +2352,7 @@ neContributor&&i("button",{onClick:()=>{setNeContributor(null);try{localStorage.
   const heroDonateStyle=heroDonateHasColor?{backgroundColor:heroDonateBtnStyle.backgroundColor,color:"#14532d"}:{};
   const heroDonateClass="mt-1.5 h-6 px-3 rounded-full font-bold text-[10.5px] "+(heroDonateHasColor?"":"ne-gold-btn");
   return c("div",{style:heroStyle,className:heroClassNameFixed,children:[
-    c("h1",{style:heroTitleStyle,className:"text-[16px] md:text-[19px] font-bold tracking-tight "+heroTitleTextClass,children:"Northeast Encyclopedia"}),
+    c("h1",{style:heroTitleStyle,className:"text-[16px] md:text-[19px] font-bold tracking-tight "+heroTitleTextClass,children:heroBannerTitle}),
     i("p",{style:heroTaglineStyle,className:heroTaglineClass,children:"If Northeast Encyclopedia was helpful, please consider supporting us."}),
     i("button",{onClick:()=>f({type:"donate"}),style:heroDonateStyle,className:heroDonateClass,children:"Donate"}),
     i("p",{style:heroBody1Style,className:"mt-2 text-[10.5px] leading-snug "+heroTextClass,children:"Explore the knowledge, history, cultures, and voices of Northeast India."}),
@@ -2360,7 +2390,7 @@ c("div",{className:"mt-4",children:[
   (()=>{
     let dbCats=(neCategories.length>0?neCategories:[]);
     let newsCat=dbCats.find((c2)=>c2.name==="Daily Northeast News"||c2.quickAccessLabel==="Daily Northeast News")||dbCats.find((c2)=>c2.name==="Local Media");
-    let newsLabel=(newsCat&&(newsCat.quickAccessLabel||newsCat.name))||"Daily Northeast News";
+    let newsLabel="Daily Northeast News";
     let newsName=(newsCat&&newsCat.name)||"Local Media";
     // Round 6: Shape/Size/FontSize/Colour for this single button. No
     // Orientation (one item, nothing to orient). Base hardcoded values come
@@ -3821,7 +3851,7 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
           return c("div",{className:"mt-4",children:[
             i("p",{className:"text-[11px] text-gray-400",children:"Pick a value for each control below, then tick which section(s) it should apply to. Unticking a section resets ONLY that control, for that section, back to today's default — every other control and every other section stays untouched."}),
 
-            i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Shape"}),
+            i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Box Shape"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Presentation only — never changes category data or how many items appear. None keeps today's exact appearance for a ticked section."}),
             c("select",{value:neBulkShape,onChange:(ev)=>setNeBulkShape(ev.target.value),className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
               i("option",{value:"default",children:"None (today's shape)"}),
@@ -3845,13 +3875,21 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
             ]}),
             neChecklistFor("size",neBulkSize,(key)=>{ neSetSectionCategorySize(key,neBulkSize); if(neBulkSize==="custom") neSetSectionCategorySizeCustom(key,{height:neBulkSizeCustomHeight}); },(key)=>neSetSectionCategorySize(key,"default")),
 
-            i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Width %"}),
-            i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Shrinks and centers the WHOLE section (1-100%, 100 = today's full width). Leave blank for full width."}),
+            i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Box width"}),
+            i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Shrinks and centers the whole selected section (1-100%). Leave blank for the existing full width."}),
             c("div",{className:"mt-2 flex gap-2 items-center",children:[
               i("input",{type:"number",min:1,max:100,value:neBulkWidth,placeholder:"100",onChange:(ev)=>setNeBulkWidth(ev.target.value),className:"w-20 h-8 px-2 rounded border text-[12px]"}),
               i("span",{className:"text-[11px] text-gray-500",children:"%"})
             ]}),
             neChecklistFor("widthPercent",neBulkWidth,(key)=>neSetSectionWidth(key,neBulkWidth),(key)=>neSetSectionWidth(key,"")),
+
+            i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Box Tall"}),
+            i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Minimum box height in pixels. Leave blank to keep the existing height."}),
+            c("div",{className:"mt-2 flex gap-2 items-center",children:[
+              i("input",{type:"number",min:24,max:800,value:neBulkTall,placeholder:"Auto",onChange:(ev)=>setNeBulkTall(ev.target.value),className:"w-24 h-8 px-2 rounded border text-[12px]"}),
+              i("span",{className:"text-[11px] text-gray-500",children:"px"})
+            ]}),
+            neChecklistFor("boxTallPx",neBulkTall,(key)=>neSetSectionTall(key,neBulkTall),(key)=>neSetSectionTall(key,"")),
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Orientation"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Horizontal and Swipe both use native touch-friendly horizontal scrolling (no carousel library). None keeps today's existing layout for a ticked section — for single-item sections (Hero, Daily News) Orientation has no visible effect."}),
@@ -3871,7 +3909,7 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
             ]}),
             neChecklistFor("columns",neBulkColumns,(key)=>neSetSectionColumns(key,neBulkColumns),(key)=>neSetSectionColumns(key,"default"),NE_GRID_SECTION_OPTIONS),
 
-            i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Font Size"}),
+            i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Text Font Size"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"None keeps today's exact text size for a ticked section."}),
             c("select",{value:neBulkFontSize,onChange:(ev)=>setNeBulkFontSize(ev.target.value),className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
               i("option",{value:"default",children:"None (today's text size)"}),
@@ -3885,7 +3923,7 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
             ]}),
             neChecklistFor("fontSize",neBulkFontSize,(key)=>{ neSetSectionFontSize(key,neBulkFontSize); if(neBulkFontSize==="custom") neSetSectionFontSizeCustom(key,{fontSize:neBulkFontSizeCustomPx}); },(key)=>neSetSectionFontSize(key,"default"),NE_TEXT_STYLE_SECTION_OPTIONS),
 
-            i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Font Colour"}),
+            i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Text Font Colour"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"The TEXT colour, separate from the box's background Colour below. None keeps today's exact text colour for a ticked section."}),
             c("select",{value:neBulkFontColor,onChange:(ev)=>setNeBulkFontColor(ev.target.value),className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
               i("option",{value:"default",children:"None (today's text colour)"}),
@@ -3919,7 +3957,7 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
             ]}),
             neChecklistFor("fontColor",neBulkFontColor,(key)=>{ neSetSectionFontColor(key,neBulkFontColor); if(neBulkFontColor==="custom") neSetSectionFontColorCustom(key,neBulkFontColorCustomHex); },(key)=>neSetSectionFontColor(key,"default"),NE_TEXT_STYLE_SECTION_OPTIONS),
 
-            i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Colour"}),
+            i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Box Colour"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"None keeps today's exact colour for a ticked section. Note: once a section's Shape is set to No Box, its background stays transparent no matter what Colour is ticked here — change that section's Shape away from No Box first if you want a Colour fill back."}),
             c("select",{value:neBulkColor,onChange:(ev)=>setNeBulkColor(ev.target.value),className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
               i("option",{value:"default",children:"None (today's colour)"}),
@@ -3943,7 +3981,7 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
             // neSetSectionFontStyleBundle for the single-state-update apply
             // path this enables. Letter Spacing and Text Align stay their
             // own separate sections below, unchanged.
-            i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Font Family"}),
+            i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Text Font Family"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"A curated set of Google Fonts, plus Bold/Italic/Underline. None/off keeps today's exact look for a ticked section (some text, like the Hero title, is already bold by design and won't visibly change)."}),
             // Round 11: replaced the native <select> with NeFontFamilyDropdown.
             // Round 10 tried per-option style:{fontFamily} on a native
