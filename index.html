@@ -183,6 +183,26 @@ let neLoadStudioConfig=async()=>{
     let d=await res.json().catch(()=>({}));
     if(d&&d.success){
       let cfg=(d.settings&&d.settings.studioConfig)||{notes:"",homepageDesigns:{designs:[],activeDesignId:null},categoryDisplay:{},customSections:[],globalFeatures:{}};
+      try{
+        if(cfg.homepageDesigns&&Array.isArray(cfg.homepageDesigns.designs)){
+          cfg={...cfg,homepageDesigns:{...cfg.homepageDesigns,designs:cfg.homepageDesigns.designs.map((dz)=>{
+            if(!dz||typeof dz!=="object") return dz;
+            const hasLegacy=dz.categoryShape||dz.categorySize||dz.categoryOrientation;
+            if(!hasLegacy) return dz;
+            const sv={...(dz.sectionVisuals||{})};
+            ["quickCategories","exploreByTopic","allCategories"].forEach((k)=>{
+              const cur={...(sv[k]||{})};
+              if(cur.shape===undefined&&dz.categoryShape) cur.shape=dz.categoryShape;
+              if(cur.size===undefined&&dz.categorySize){ cur.size=dz.categorySize; if(dz.categorySize==="custom"&&dz.categorySizeCustom) cur.sizeCustom=dz.categorySizeCustom; }
+              if(cur.orientation===undefined&&dz.categoryOrientation) cur.orientation=dz.categoryOrientation;
+              sv[k]=cur;
+            });
+            const out={...dz,sectionVisuals:sv};
+            delete out.categoryShape; delete out.categorySize; delete out.categorySizeCustom; delete out.categoryOrientation;
+            return out;
+          })}};
+        }
+      }catch(migErr){}
       setNeStudioConfig(cfg);
     } else {
       setNeStudioSaveMsg("Could not load Studio configuration from D1: "+(d&&d.error||res.status));
@@ -1504,9 +1524,13 @@ function neBuildSelectedCategoryTiles(dbCats, selectedIds, f, articlesList, stor
 // they never had a shared legacy field, so an unset value is naturally
 // "None" (today's default appearance) with no fallback needed.
 const NE_DESIGN_SECTION_KEYS=["hero","quickActions","dailyNews","quickCategories","featured","exploreByTopic","allCategories"];
+const NE_LEGACY_SHARED_VISUAL_KEYS=["quickCategories","exploreByTopic","allCategories"];
 function neSectionVisualDesign(design, sectionKey){
   try{
     if(!design) return design;
+    if(!NE_LEGACY_SHARED_VISUAL_KEYS.includes(sectionKey)){
+      design={...design,categoryShape:undefined,categorySize:undefined,categorySizeCustom:undefined,categoryOrientation:undefined};
+    }
     const sv=(design.sectionVisuals&&typeof design.sectionVisuals==="object")?design.sectionVisuals[sectionKey]:null;
     if(!sv||typeof sv!=="object") return design; // no per-section override at all -> pure legacy fallback
     return {
@@ -2447,7 +2471,7 @@ c("div",{className:"mt-6",children: (()=>{
   // Text Align/Columns must route through the customized branch the same
   // way, or setting ONLY one of those would silently do nothing, exactly
   // the bug class this gate exists to prevent.
-  const neQcHasFontOrColor=Object.keys(neSectionFontSizeStyle(neQcVisForGate)).length>0||Object.keys(neSectionColorStyle(neQcVisForGate)).length>0||Object.keys(neSectionFontColorStyle(neQcVisForGate)).length>0||Object.keys(neSectionFontExtraStyle(neQcVisForGate)).length>0||neSectionColumnsClass(neQcVisForGate)!=="";
+  const neQcHasFontOrColor=neCategoryVisualActive(neQcVisForGate)||Object.keys(neSectionFontSizeStyle(neQcVisForGate)).length>0||Object.keys(neSectionColorStyle(neQcVisForGate)).length>0||Object.keys(neSectionFontColorStyle(neQcVisForGate)).length>0||Object.keys(neSectionFontExtraStyle(neQcVisForGate)).length>0||neSectionColumnsClass(neQcVisForGate)!=="";
   return (!neCategoryCustomizationActive(neGetPublicHomeDesign(e.settings.publicHomeDesign))&&!neCategorySelectionActive(neGetPublicHomeDesign(e.settings.publicHomeDesign))&&!neQcHasFontOrColor);
 })() ? [
   c("div",{className:"grid grid-cols-2 gap-2",children:(neCategories.length>0?neBuildQuickCategories(neCategories,f):NE_CATEGORIES).filter((cat)=>cat.n<=16).map((cat)=>i("button",{key:cat.n,onClick:cat.action,className:"h-12 rounded-full ne-dgreen-bg flex items-center px-3 gap-1.5 text-left",children:c("span",{className:"flex items-center gap-1.5 min-w-0 w-full",children:[i("span",{className:"font-bold text-white text-[12px]",children:cat.n}),i("span",{style:{overflowWrap:"break-word",wordBreak:"break-word"},className:"font-semibold text-white text-[11px] leading-tight flex-1 min-w-0",children:cat.label})]})}))}),
@@ -2665,17 +2689,17 @@ c("div",{className:"mt-10",children:[
     // never blocked the inline backgroundColor override the way the
     // !important ne-dgreen-bg class did elsewhere, but the lock still keeps
     // this section consistent with the other 6).
-    const cardStyle=neLockNoBoxBackground({...featShape,...(featSize.height?{height:featSize.height}:{}),...featColor},featVis&&featVis.categoryShape);
+    const cardStyle=neLockNoBoxBackground({height:"220px",...featShape,...(featSize.height?{height:featSize.height}:{}),...featColor},featVis&&featVis.categoryShape);
     const featured=e.articles.filter((a)=>Array.isArray(a.categories)&&a.categories.includes("Featured"));
     if(featured.length===0){
       return c("div",{className:"p-8 rounded-2xl bg-gray-50 text-center",children:[i("div",{className:"text-gray-500 font-semibold",children:"No featured content yet."}),i("div",{className:"text-gray-400 text-[13px] mt-1",children:"Super Admin can feature published articles here."})]});
     }
     const cards=featured.map((a)=>c("button",{onClick:()=>Ut(a),style:cardStyle,className:"text-left rounded-2xl border-2 ne-dgreen-border bg-white overflow-hidden flex flex-col h-[220px]",children:[
-      a.imageUrl?i("img",{src:a.imageUrl,className:"h-[110px] w-full object-cover"}):i("div",{className:"h-[110px] w-full ne-dgreen-bg flex items-center justify-center text-white text-[11px] font-bold px-2 text-center",children:a.state||"Featured"}),
+      a.imageUrl?i("img",{src:a.imageUrl,style:{height:"110px",flexShrink:0},className:"w-full object-cover"}):i("div",{style:{height:"110px",flexShrink:0},className:"w-full ne-dgreen-bg flex items-center justify-center text-white text-[11px] font-bold px-2 text-center",children:a.state||"Featured"}),
       c("div",{className:"p-3 flex-1 flex flex-col",children:[i("div",{style:{...featFont,...featFontColor,...featFontExtra},className:"font-bold text-[13px] leading-tight line-clamp-2",children:a.title}),i("div",{className:"text-[11px] text-gray-500 mt-1 line-clamp-3 flex-1",children:a.intro})]})
     ]},a.id));
     if(featOrient) return c("div",{style:featOrient.containerStyle,className:featOrient.containerClassName,children:cards});
-    if(featVis&&featVis.categoryOrientation==="vertical") return c("div",{className:"flex flex-col gap-3",children:cards});
+    if(featVis&&featVis.categoryOrientation==="vertical"&&!featColsClass) return c("div",{className:"flex flex-col gap-3",children:cards});
     return c("div",{className:"grid "+(featColsClass||"grid-cols-2")+" gap-3",children:cards});
   })()
 ]})]}))]}),
@@ -3877,12 +3901,12 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide",children:"Select Section"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Select one section and edit its settings. The selected section stays selected while you edit controls or switch to another section."}),
             c("select",{value:neDesignSelectedSection,onChange:(ev)=>setNeDesignSelectedSection(ev.target.value),className:"mt-2 w-full h-10 px-3 rounded-lg border text-[13px]",children:[
-              {key:"hero",label:"Hero / Banner"},{key:"quickActions",label:"Quick Action Buttons"},{key:"dailyNews",label:"Daily Northeast News"},{key:"quickCategories",label:"Quick Categories Grid"},{key:"featured",label:"Today's Featured"},{key:"exploreByTopic",label:"Explore by Topic"},{key:"allCategories",label:"All Categories"}
+              {key:"hero",label:"Hero / Banner"},{key:"quickActions",label:"Quick Action Buttons"},{key:"dailyNews",label:"Daily Northeast News"},{key:"quickCategories",label:"Quick Categories Grid"},{key:"featured",label:"Today's Featured"},{key:"exploreByTopic",label:"Explore by Topic"},{key:"allCategories",label:"All Categories"},{key:"footer",label:"Footer"}
             ].map((opt)=>i("option",{key:opt.key,value:opt.key,children:opt.label}))}),
-            i("p",{className:"mt-2 text-[11px] text-gray-500",children:"Editing: "+(({hero:"Hero / Banner",quickActions:"Quick Action Buttons",dailyNews:"Daily Northeast News",quickCategories:"Quick Categories Grid",featured:"Today's Featured",exploreByTopic:"Explore by Topic",allCategories:"All Categories"})[neDesignSelectedSection]||neDesignSelectedSection)}),
-            i("p",{className:"mt-2 text-[11px] text-gray-400",children:"The controls below now apply directly to the selected section. Existing multi-section checklists remain available for bulk changes."}),
-            i("p",{className:"text-[11px] text-gray-400",children:"Pick a value for each control below, then tick which section(s) it should apply to. Unticking a section resets ONLY that control, for that section, back to today's default — every other control and every other section stays untouched."}),
+            i("p",{className:"mt-2 text-[11px] text-gray-500",children:"Editing: "+(({hero:"Hero / Banner",quickActions:"Quick Action Buttons",dailyNews:"Daily Northeast News",quickCategories:"Quick Categories Grid",featured:"Today's Featured",exploreByTopic:"Explore by Topic",allCategories:"All Categories",footer:"Footer"})[neDesignSelectedSection]||neDesignSelectedSection)}),
+            i("p",{className:"mt-2 text-[11px] text-gray-400",children:"Every control below changes ONLY the section selected above. No other section is touched. Choose None to reset that one control for this section."}),
 
+            ...(neDesignSelectedSection!=="footer"?[
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Box Shape"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Presentation only — never changes category data or how many items appear. None keeps today's exact appearance for a ticked section."}),
             c("select",{value:neBulkShape,onChange:(ev)=>{const v=ev.target.value;setNeBulkShape(v);neSetSectionCategoryShape(neDesignSelectedSection,v);},className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
@@ -3891,11 +3915,10 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
               i("option",{value:"rectangle",children:"Rectangle"}),i("option",{value:"square",children:"Square"}),
               i("option",{value:"none",children:"No Box (transparent background)"})
             ]}),
-            neChecklistFor("shape",neBulkShape,(key)=>neSetSectionCategoryShape(key,neBulkShape),(key)=>neSetSectionCategoryShape(key,"default")),
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Size"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Responsive on desktop and mobile. None keeps today's exact size for a ticked section."}),
-            c("select",{value:neBulkSize,onChange:(ev)=>{const v=ev.target.value;setNeBulkSize(v);neSetSectionCategorySize(neDesignSelectedSection,v);},className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
+            c("select",{value:neBulkSize,onChange:(ev)=>{const v=ev.target.value;setNeBulkSize(v);neSetSectionCategorySize(neDesignSelectedSection,v);if(v==="custom")neSetSectionCategorySizeCustom(neDesignSelectedSection,{height:neBulkSizeCustomHeight});},className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
               i("option",{value:"default",children:"None (Standard)"}),
               i("option",{value:"smaller",children:"Smaller"}),i("option",{value:"standard",children:"Standard"}),
               i("option",{value:"medium",children:"Medium"}),i("option",{value:"large",children:"Large"}),
@@ -3905,7 +3928,6 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
               i("span",{className:"text-[11px] text-gray-500",children:"Height (px)"}),
               i("input",{type:"number",value:neBulkSizeCustomHeight,onChange:(ev)=>{const v=Number(ev.target.value)||48;setNeBulkSizeCustomHeight(v);neSetSectionCategorySizeCustom(neDesignSelectedSection,{height:v});},className:"w-20 h-8 px-2 rounded border text-[12px]"})
             ]}),
-            neChecklistFor("size",neBulkSize,(key)=>{ neSetSectionCategorySize(key,neBulkSize); if(neBulkSize==="custom") neSetSectionCategorySizeCustom(key,{height:neBulkSizeCustomHeight}); },(key)=>neSetSectionCategorySize(key,"default")),
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Box width"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Shrinks and centers the whole selected section (1-100%). Leave blank for the existing full width."}),
@@ -3913,7 +3935,6 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
               i("input",{type:"number",min:1,max:100,value:neBulkWidth,placeholder:"100",onChange:(ev)=>{const v=ev.target.value;setNeBulkWidth(v);neSetSectionWidth(neDesignSelectedSection,v);},className:"w-20 h-8 px-2 rounded border text-[12px]"}),
               i("span",{className:"text-[11px] text-gray-500",children:"%"})
             ]}),
-            neChecklistFor("widthPercent",neBulkWidth,(key)=>neSetSectionWidth(key,neBulkWidth),(key)=>neSetSectionWidth(key,"")),
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Box Tall"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Minimum box height in pixels. Leave blank to keep the existing height."}),
@@ -3921,8 +3942,9 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
               i("input",{type:"number",min:24,max:800,value:neBulkTall,placeholder:"Auto",onChange:(ev)=>{const v=ev.target.value;setNeBulkTall(v);neSetSectionTall(neDesignSelectedSection,v);},className:"w-24 h-8 px-2 rounded border text-[12px]"}),
               i("span",{className:"text-[11px] text-gray-500",children:"px"})
             ]}),
-            neChecklistFor("boxTallPx",neBulkTall,(key)=>neSetSectionTall(key,neBulkTall),(key)=>neSetSectionTall(key,"")),
+            ]:[]),
 
+            ...(!["footer","hero","dailyNews"].includes(neDesignSelectedSection)?[
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Orientation"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Horizontal and Swipe both use native touch-friendly horizontal scrolling (no carousel library). None keeps today's existing layout for a ticked section — for single-item sections (Hero, Daily News) Orientation has no visible effect."}),
             c("select",{value:neBulkOrient,onChange:(ev)=>{const v=ev.target.value;setNeBulkOrient(v);neSetSectionCategoryOrientation(neDesignSelectedSection,v);},className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
@@ -3930,8 +3952,9 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
               i("option",{value:"vertical",children:"Vertical"}),i("option",{value:"horizontal",children:"Horizontal"}),
               i("option",{value:"swipe",children:"Swipe"})
             ]}),
-            neChecklistFor("orientation",neBulkOrient,(key)=>neSetSectionCategoryOrientation(key,neBulkOrient),(key)=>neSetSectionCategoryOrientation(key,"default")),
+            ]:[]),
 
+            ...(["quickCategories","exploreByTopic","featured","allCategories"].includes(neDesignSelectedSection)?[
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Columns"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Quick Categories Grid, Explore by Topic, and Today's Featured are already grids. All Categories is normally a list of full-width rows — picking a column count here switches it into a tile grid like Explore by Topic; leaving it at None keeps it as rows. The count chosen here applies at every screen width, including mobile. Has no visible effect on a section whose Orientation is set to Horizontal or Swipe."}),
             c("select",{value:neBulkColumns,onChange:(ev)=>{const v=ev.target.value;setNeBulkColumns(v);neSetSectionColumns(neDesignSelectedSection,v);},className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
@@ -3939,11 +3962,11 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
               i("option",{value:"1",children:"1"}),i("option",{value:"2",children:"2"}),i("option",{value:"3",children:"3"}),
               i("option",{value:"4",children:"4"}),i("option",{value:"5",children:"5"}),i("option",{value:"6",children:"6"})
             ]}),
-            neChecklistFor("columns",neBulkColumns,(key)=>neSetSectionColumns(key,neBulkColumns),(key)=>neSetSectionColumns(key,"default"),NE_GRID_SECTION_OPTIONS),
+            ]:[]),
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Text Font Size"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"None keeps today's exact text size for a ticked section."}),
-            c("select",{value:neBulkFontSize,onChange:(ev)=>{const v=ev.target.value;setNeBulkFontSize(v);neSetSectionFontSize(neDesignSelectedSection,v);},className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
+            c("select",{value:neBulkFontSize,onChange:(ev)=>{const v=ev.target.value;setNeBulkFontSize(v);neSetSectionFontSize(neDesignSelectedSection,v);if(v==="custom")neSetSectionFontSizeCustom(neDesignSelectedSection,{fontSize:neBulkFontSizeCustomPx});},className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
               i("option",{value:"default",children:"None (today's text size)"}),
               i("option",{value:"small",children:"Small"}),i("option",{value:"standard",children:"Standard"}),
               i("option",{value:"medium",children:"Medium"}),i("option",{value:"large",children:"Large"}),
@@ -3953,7 +3976,6 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
               i("span",{className:"text-[11px] text-gray-500",children:"Font (px)"}),
               i("input",{type:"number",value:neBulkFontSizeCustomPx,onChange:(ev)=>{const v=Number(ev.target.value)||13;setNeBulkFontSizeCustomPx(v);neSetSectionFontSizeCustom(neDesignSelectedSection,{fontSize:v});},className:"w-20 h-8 px-2 rounded border text-[12px]"})
             ]}),
-            neChecklistFor("fontSize",neBulkFontSize,(key)=>{ neSetSectionFontSize(key,neBulkFontSize); if(neBulkFontSize==="custom") neSetSectionFontSizeCustom(key,{fontSize:neBulkFontSizeCustomPx}); },(key)=>neSetSectionFontSize(key,"default"),NE_TEXT_STYLE_SECTION_OPTIONS),
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Text Font Colour"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"The TEXT colour, separate from the box's background Colour below. None keeps today's exact text colour for a ticked section."}),
@@ -3987,7 +4009,6 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
               // typing/pasting an exact one; neither replaces the other.
               i(NeColorDragPicker,{value:neBulkFontColorCustomHex,onChange:(v)=>{setNeBulkFontColorCustomHex(v);neSetSectionFontColorCustom(neDesignSelectedSection,v);}})
             ]}),
-            neChecklistFor("fontColor",neBulkFontColor,(key)=>{ neSetSectionFontColor(key,neBulkFontColor); if(neBulkFontColor==="custom") neSetSectionFontColorCustom(key,neBulkFontColorCustomHex); },(key)=>neSetSectionFontColor(key,"default"),NE_TEXT_STYLE_SECTION_OPTIONS),
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Box Colour"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"None keeps today's exact colour for a ticked section. Note: once a section's Shape is set to No Box, its background stays transparent no matter what Colour is ticked here — change that section's Shape away from No Box first if you want a Colour fill back."}),
@@ -4003,7 +4024,6 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
               ]}),
               i(NeColorDragPicker,{value:neBulkColorCustomHex,onChange:(v)=>{setNeBulkColorCustomHex(v);neSetSectionColorCustom(neDesignSelectedSection,v);}})
             ]}),
-            neChecklistFor("color",neBulkColor,(key)=>{ neSetSectionColor(key,neBulkColor); if(neBulkColor==="custom") neSetSectionColorCustom(key,neBulkColorCustomHex); },(key)=>neSetSectionColor(key,"default"),NE_TEXT_STYLE_SECTION_OPTIONS),
 
             // Round 10: Font Family, Bold, Italic and Underline are now ONE
             // merged section (previously 4 separate sections each with
@@ -4048,38 +4068,6 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
             // (this bundle checklist is hardcoded separately since it
             // checks 4 fields at once, not 1, so it can't call
             // neChecklistFor directly -- but gets the identical treatment).
-            (()=>{
-              const bundleRows=NE_TEXT_STYLE_SECTION_OPTIONS.map((opt)=>{
-                const curFam=neGetSectionVisualField(d,opt.key,"fontFamily");
-                const curFamNorm=(curFam===null||curFam===undefined||curFam==="")?"default":curFam;
-                const curBoldNorm=(neGetSectionVisualField(d,opt.key,"bold")==="on")?"on":"default";
-                const curItalicNorm=(neGetSectionVisualField(d,opt.key,"italic")==="on")?"on":"default";
-                const curUnderlineNorm=(neGetSectionVisualField(d,opt.key,"underline")==="on")?"on":"default";
-                const stagedBoldNorm=(neBulkBold==="on")?"on":"default";
-                const stagedItalicNorm=(neBulkItalic==="on")?"on":"default";
-                const stagedUnderlineNorm=(neBulkUnderline==="on")?"on":"default";
-                const stagedIsAllDefault=(neBulkFontFamily==="default")&&stagedBoldNorm==="default"&&stagedItalicNorm==="default"&&stagedUnderlineNorm==="default";
-                const isChecked=!stagedIsAllDefault && curFamNorm===neBulkFontFamily && curBoldNorm===stagedBoldNorm && curItalicNorm===stagedItalicNorm && curUnderlineNorm===stagedUnderlineNorm;
-                return {opt,isChecked};
-              });
-              const bundleAllChecked=bundleRows.length>0 && !(neBulkFontFamily==="default"&&neBulkBold!=="on"&&neBulkItalic!=="on"&&neBulkUnderline!=="on") && bundleRows.every((r)=>r.isChecked);
-              return c("div",{className:"mt-2 flex flex-wrap gap-2",children:[
-                i("label",{key:"__selectAll",className:"flex items-center gap-1 px-2 py-1 rounded border text-[11px] font-bold cursor-pointer select-none "+(bundleAllChecked?"bg-[#e8f5e9] border-[#2e7d32]":"border-gray-400 text-gray-700 bg-gray-100"),children:[
-                  i("input",{type:"checkbox",checked:bundleAllChecked,onChange:()=>{
-                    if(bundleAllChecked) bundleRows.forEach((r)=>neSetSectionFontStyleBundle(r.opt.key,"default","default","default","default"));
-                    else bundleRows.forEach((r)=>neSetSectionFontStyleBundle(r.opt.key,neBulkFontFamily,neBulkBold,neBulkItalic,neBulkUnderline));
-                  },className:"h-3.5 w-3.5"}),
-                  i("span",{children:"Select All"})
-                ]}),
-                ...bundleRows.map(({opt,isChecked})=>c("label",{key:opt.key,className:"flex items-center gap-1 px-2 py-1 rounded border text-[11px] cursor-pointer select-none "+(isChecked?"bg-[#e8f5e9] border-[#2e7d32]":"border-gray-200 text-gray-600"),children:[
-                  i("input",{type:"checkbox",checked:isChecked,onChange:()=>{
-                    if(isChecked) neSetSectionFontStyleBundle(opt.key,"default","default","default","default");
-                    else neSetSectionFontStyleBundle(opt.key,neBulkFontFamily,neBulkBold,neBulkItalic,neBulkUnderline);
-                  },className:"h-3.5 w-3.5"}),
-                  i("span",{children:opt.label})
-                ]}))
-              ]});
-            })(),
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Letter Spacing"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"In pixels, -5 to 20. Leave blank for today's default spacing."}),
@@ -4087,7 +4075,6 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
               i("input",{type:"number",min:-5,max:20,value:neBulkLetterSpacing,placeholder:"0",onChange:(ev)=>{const v=ev.target.value;setNeBulkLetterSpacing(v);neSetSectionLetterSpacing(neDesignSelectedSection,v);},className:"w-20 h-8 px-2 rounded border text-[12px]"}),
               i("span",{className:"text-[11px] text-gray-500",children:"px"})
             ]}),
-            neChecklistFor("letterSpacing",neBulkLetterSpacing,(key)=>neSetSectionLetterSpacing(key,neBulkLetterSpacing),(key)=>neSetSectionLetterSpacing(key,""),NE_TEXT_STYLE_SECTION_OPTIONS),
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Text Align"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"None keeps today's exact alignment for a ticked section."}),
@@ -4095,7 +4082,6 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
               i("option",{value:"default",children:"None (today's alignment)"}),
               i("option",{value:"left",children:"Left"}),i("option",{value:"center",children:"Center"}),i("option",{value:"right",children:"Right"})
             ]}),
-            neChecklistFor("textAlign",neBulkTextAlign,(key)=>neSetSectionTextAlign(key,neBulkTextAlign),(key)=>neSetSectionTextAlign(key,"default"),NE_TEXT_STYLE_SECTION_OPTIONS),
 
             // Round 8: page-wide background colour -- a DESIGN-level
             // control (not scoped to any one section, and never a
