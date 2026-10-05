@@ -1405,17 +1405,28 @@ function neCategoryVisualActive(design){
 function neCategoryCardVisualStyle(design){
   try{
     const shape=neCategoryShapeStyle(design);
-    const size=neCategorySizeStyle(design);
     const orient=neCategoryOrientationConfig(design);
-    // Round 8: also pass through backgroundColor/boxShadow from shape (only
-    // ever set by shape==="none", "No Box") -- these were previously
-    // dropped here, silently, which is why "No Box" had zero visible effect
-    // on Explore by Topic specifically (its shape/size otherwise stayed
-    // content-agnostic on purpose, but a background removal is safe on any
-    // tile shape). Undefined for every other shape, so this is a no-op
-    // whenever "No Box" isn't selected.
+    // Fix: these are CARDS (icon + name + count), not 36-72px pill buttons.
+    // Previously the pill Size preset was applied here -- its "0 12px"
+    // padding wiped out the card's own vertical padding (tiles collapsed to
+    // ~17px), its height was never applied (Custom height ignored), and its
+    // 12px font applied even when Size was None (so merely setting Columns
+    // or Colour shrank the text). Now Size sets a card-scale minimum height
+    // and text size; None leaves the card exactly as designed.
+    // backgroundColor/boxShadow still pass through from shape (Round 8,
+    // "No Box").
+    const sz=design&&design.categorySize;
+    const cardPresets={smaller:{minHeight:72,fontSize:13},standard:{minHeight:96,fontSize:15},medium:{minHeight:120,fontSize:16},large:{minHeight:150,fontSize:18}};
+    let sizeStyle={};
+    if(sz==="custom"&&design.categorySizeCustom&&typeof design.categorySizeCustom==="object"&&typeof design.categorySizeCustom.height==="number"){
+      const h=Math.min(400,Math.max(40,design.categorySizeCustom.height));
+      sizeStyle={minHeight:h+"px",fontSize:Math.min(22,Math.max(11,Math.round(h/7)))+"px"};
+    }else if(typeof sz==="string"&&cardPresets[sz]){
+      sizeStyle={minHeight:cardPresets[sz].minHeight+"px",fontSize:cardPresets[sz].fontSize+"px"};
+    }
+    const tileW=neSizeTileWidthPx(design,"tile");
     return {
-      style:{borderRadius:shape.borderRadius,fontSize:size.fontSize,padding:size.padding,backgroundColor:shape.backgroundColor,boxShadow:shape.boxShadow,...(orient?orient.itemStyle:{})},
+      style:{borderRadius:shape.borderRadius,...sizeStyle,backgroundColor:shape.backgroundColor,boxShadow:shape.boxShadow,overflowWrap:"break-word",...(orient?orient.itemStyle:{}),...(orient&&tileW?{width:tileW+"px",minWidth:tileW+"px"}:{})},
       orient
     };
   }catch(err){ return {style:{},orient:null}; }
@@ -1764,6 +1775,47 @@ function neSectionFontExtraStyle(design){
 // 1 keeps its own built-in single-column rule, and unset/default falls
 // through to "" so the section's own hardcoded grid-cols-2 (md:grid-cols-4
 // for Explore) Tailwind classes keep rendering byte-identical to today.
+// Responsive grid rule shared by Quick Categories, Explore by Topic, All
+// Categories and Today's Featured (replaces the old fixed-count classes,
+// which used the SAME column count on phone and computer -- the root cause
+// of the "frozen desktop size" boxes):
+//   * Columns set (1-6): that many per row on a phone, double on a computer
+//     (768px+), at most 6.
+//   * Columns None + Size set: every tile gets the Size's width, and the
+//     screen fits as many as it can (rows always filled edge to edge).
+//   * Neither: the section's own default (defM per row on a phone, defD on
+//     a computer).
+const NE_TILE_WIDTHS={smaller:120,standard:160,medium:200,large:240};
+const NE_ROW_WIDTHS={smaller:200,standard:240,medium:280,large:340};
+const NE_FEATURED_WIDTHS={smaller:140,standard:170,medium:210,large:260};
+function neSizeTileWidthPx(design,kind){
+  try{
+    const sz=design&&design.categorySize;
+    const cust=(sz==="custom"&&design.categorySizeCustom&&typeof design.categorySizeCustom==="object"&&typeof design.categorySizeCustom.height==="number")?design.categorySizeCustom.height:null;
+    if(kind==="featured"){
+      if(cust!==null) return Math.min(480,Math.max(120,Math.round(Math.min(NE_FEATURED_CUSTOM_MAX,Math.max(NE_FEATURED_CUSTOM_MIN,cust))*0.8)));
+      return NE_FEATURED_WIDTHS[sz]||null;
+    }
+    if(kind==="row"){
+      if(cust!==null) return Math.min(400,Math.max(160,Math.round(cust*2.5)));
+      return NE_ROW_WIDTHS[sz]||null;
+    }
+    if(cust!==null) return Math.min(360,Math.max(100,Math.round(cust*3)));
+    return NE_TILE_WIDTHS[sz]||null;
+  }catch(err){ return null; }
+}
+function neGridSpec(design,kind,defM,defD){
+  try{
+    const n=design&&design.sectionColumns;
+    if(typeof n==="number"&&Number.isFinite(n)&&n>=1&&n<=6){
+      const m=Math.round(n);
+      return {className:"ne-rg",style:{"--ne-m":m,"--ne-d":Math.min(6,m*2)}};
+    }
+    const w=neSizeTileWidthPx(design,kind);
+    if(w) return {className:"ne-rg-auto",style:{"--ne-w":w+"px"}};
+  }catch(err){}
+  return {className:"ne-rg",style:{"--ne-m":defM,"--ne-d":defD}};
+}
 function neSectionColumnsClass(design){
   try{
     const n=design&&design.sectionColumns;
@@ -2218,7 +2270,7 @@ const neTitleStyle=(key)=>{
   return {style:{...colorStyle,...sizeStyle,...extraStyle},hasColor:!!colorStyle.color};
 };
 return c("div",{className:"min-h-screen bg-[#fefefe] text-[#1a1a1a] font-[Inter,system-ui,sans-serif] selection:bg-[#ff6f00]/20",style:{zoom:neFontSize==="Large"?1.15:neFontSize==="Medium"?1.075:1,filter:neColorMode==="Dark"?"invert(1) hue-rotate(180deg)":"none",...nePageBgStyle},children:[
-i("div",{id:"ne-hidden-google-btn",style:{position:"fixed",top:"-9999px",left:"-9999px",opacity:0,pointerEvents:"none"}}),i("style",{children:"@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap'); @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Open+Sans:wght@400;700&family=Lato:wght@400;700&family=Poppins:wght@400;700&family=Montserrat:wght@400;700&family=Nunito:wght@400;700&family=Work+Sans:wght@400;700&family=Rubik:wght@400;700&family=Manrope:wght@400;700&family=Merriweather:wght@400;700&family=Playfair+Display:wght@400;700&family=Lora:wght@400;700&family=PT+Serif:wght@400;700&family=Source+Serif+4:wght@400;700&family=Oswald:wght@400;700&family=Bebas+Neue&family=Raleway:wght@400;700&family=JetBrains+Mono:wght@400;700&family=Space+Mono:wght@400;700&display=swap'); @import url('https://fonts.googleapis.com/css2?family=Great+Vibes&family=Lobster&family=Dancing+Script:wght@400;700&family=Pacifico&family=Parisienne&family=Sacramento&family=Allura&family=Cookie&family=Grand+Hotel&family=Rochester&family=Berkshire+Swash&family=Leckerli+One&family=Questrial&display=swap'); h1,h2,h3{font-family:'Fraunces',serif;} .ne-dgreen-bg{background-color:#14532d !important} .ne-dgreen-bg:hover{background-color:#1b6a3a !important} .ne-dgreen-text{color:#14532d !important} .ne-dgreen-border{border-color:#14532d !important} .ne-dgreen-border-10{border-color:rgba(20,83,45,0.10) !important} .ne-dgreen-border-15{border-color:rgba(20,83,45,0.15) !important} .ne-dgreen-40{color:rgba(20,83,45,0.40) !important} .ne-dgreen-ring:focus{--tw-ring-color:rgba(20,83,45,0.20) !important} .ne-dgreen-focus-border:focus{border-color:rgba(20,83,45,0.30) !important} .ne-dgreen-outline{border:2px solid #14532d !important;color:#14532d !important;background:#fff} .ne-dgreen-outline:hover{background-color:rgba(20,83,45,0.05) !important} .ne-dgreen-pill-active{background-color:#14532d !important;color:#fff !important;border-color:#14532d !important} .ne-dgreen-pill-inactive{border:2px solid #14532d !important;color:#14532d !important;background:#fff} .ne-dgreen-pill-inactive:hover{background-color:rgba(20,83,45,0.05) !important} .ne-gold-btn{background-color:#ffd54f !important;color:#14532d !important} .ne-gold-text{color:#ffd54f !important} .ne-profile-placeholder{background-color:#d1d5db !important} .ne-cols-1{grid-template-columns:repeat(1,minmax(0,1fr)) !important} .ne-cols-2{grid-template-columns:repeat(2,minmax(0,1fr)) !important} .ne-cols-3{grid-template-columns:repeat(3,minmax(0,1fr)) !important} .ne-cols-4{grid-template-columns:repeat(4,minmax(0,1fr)) !important} .ne-cols-5{grid-template-columns:repeat(5,minmax(0,1fr)) !important} .ne-cols-6{grid-template-columns:repeat(6,minmax(0,1fr)) !important}"}),c("header",{className:"sticky top-0 z-40 bg-white border-b ne-dgreen-border-10",children:[c("div",{className:"max-w-[1280px] mx-auto px-4 py-3 flex items-center justify-between gap-3",children:[
+i("div",{id:"ne-hidden-google-btn",style:{position:"fixed",top:"-9999px",left:"-9999px",opacity:0,pointerEvents:"none"}}),i("style",{children:"@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap'); @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Open+Sans:wght@400;700&family=Lato:wght@400;700&family=Poppins:wght@400;700&family=Montserrat:wght@400;700&family=Nunito:wght@400;700&family=Work+Sans:wght@400;700&family=Rubik:wght@400;700&family=Manrope:wght@400;700&family=Merriweather:wght@400;700&family=Playfair+Display:wght@400;700&family=Lora:wght@400;700&family=PT+Serif:wght@400;700&family=Source+Serif+4:wght@400;700&family=Oswald:wght@400;700&family=Bebas+Neue&family=Raleway:wght@400;700&family=JetBrains+Mono:wght@400;700&family=Space+Mono:wght@400;700&display=swap'); @import url('https://fonts.googleapis.com/css2?family=Great+Vibes&family=Lobster&family=Dancing+Script:wght@400;700&family=Pacifico&family=Parisienne&family=Sacramento&family=Allura&family=Cookie&family=Grand+Hotel&family=Rochester&family=Berkshire+Swash&family=Leckerli+One&family=Questrial&display=swap'); h1,h2,h3{font-family:'Fraunces',serif;} .ne-dgreen-bg{background-color:#14532d !important} .ne-dgreen-bg:hover{background-color:#1b6a3a !important} .ne-dgreen-text{color:#14532d !important} .ne-dgreen-border{border-color:#14532d !important} .ne-dgreen-border-10{border-color:rgba(20,83,45,0.10) !important} .ne-dgreen-border-15{border-color:rgba(20,83,45,0.15) !important} .ne-dgreen-40{color:rgba(20,83,45,0.40) !important} .ne-dgreen-ring:focus{--tw-ring-color:rgba(20,83,45,0.20) !important} .ne-dgreen-focus-border:focus{border-color:rgba(20,83,45,0.30) !important} .ne-dgreen-outline{border:2px solid #14532d !important;color:#14532d !important;background:#fff} .ne-dgreen-outline:hover{background-color:rgba(20,83,45,0.05) !important} .ne-dgreen-pill-active{background-color:#14532d !important;color:#fff !important;border-color:#14532d !important} .ne-dgreen-pill-inactive{border:2px solid #14532d !important;color:#14532d !important;background:#fff} .ne-dgreen-pill-inactive:hover{background-color:rgba(20,83,45,0.05) !important} .ne-gold-btn{background-color:#ffd54f !important;color:#14532d !important} .ne-gold-text{color:#ffd54f !important} .ne-profile-placeholder{background-color:#d1d5db !important} .ne-rg{display:grid;grid-template-columns:repeat(var(--ne-m,2),minmax(0,1fr))} @media (min-width:768px){.ne-rg{grid-template-columns:repeat(var(--ne-d,4),minmax(0,1fr))}} .ne-rg-auto{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--ne-w,160px)),1fr))} .ne-qc17{width:calc(100% / var(--ne-m,2) - 4px)} @media (min-width:768px){.ne-qc17{width:calc(100% / var(--ne-d,4) - 6px)}} .ne-cols-1{grid-template-columns:repeat(1,minmax(0,1fr)) !important} .ne-cols-2{grid-template-columns:repeat(2,minmax(0,1fr)) !important} .ne-cols-3{grid-template-columns:repeat(3,minmax(0,1fr)) !important} .ne-cols-4{grid-template-columns:repeat(4,minmax(0,1fr)) !important} .ne-cols-5{grid-template-columns:repeat(5,minmax(0,1fr)) !important} .ne-cols-6{grid-template-columns:repeat(6,minmax(0,1fr)) !important}"}),c("header",{className:"sticky top-0 z-40 bg-white border-b ne-dgreen-border-10",children:[c("div",{className:"max-w-[1280px] mx-auto px-4 py-3 flex items-center justify-between gap-3",children:[
   c("div",{className:"flex items-center gap-3 min-w-0",children:[
     i("button",{onClick:()=>P(!w),"aria-label":"Menu",className:"p-1 shrink-0",children:i(Zr,{size:26,className:"ne-dgreen-text"})}),
     (()=>{
@@ -2501,8 +2553,8 @@ c("div",{className:"mt-6",children: (()=>{
   const neQcHasFontOrColor=neCategoryVisualActive(neQcVisForGate)||Object.keys(neSectionFontSizeStyle(neQcVisForGate)).length>0||Object.keys(neSectionColorStyle(neQcVisForGate)).length>0||Object.keys(neSectionFontColorStyle(neQcVisForGate)).length>0||Object.keys(neSectionFontExtraStyle(neQcVisForGate)).length>0||neSectionColumnsClass(neQcVisForGate)!=="";
   return (!neCategoryCustomizationActive(neGetPublicHomeDesign(e.settings.publicHomeDesign))&&!neCategorySelectionActive(neGetPublicHomeDesign(e.settings.publicHomeDesign))&&!neQcHasFontOrColor);
 })() ? [
-  c("div",{className:"grid grid-cols-2 gap-2",children:(neCategories.length>0?neBuildQuickCategories(neCategories,f):NE_CATEGORIES).filter((cat)=>cat.n<=16).map((cat)=>i("button",{key:cat.n,onClick:cat.action,className:"h-12 rounded-full ne-dgreen-bg flex items-center px-3 gap-1.5 text-left",children:c("span",{className:"flex items-center gap-1.5 min-w-0 w-full",children:[i("span",{className:"font-bold text-white text-[12px]",children:cat.n}),i("span",{style:{overflowWrap:"break-word",wordBreak:"break-word"},className:"font-semibold text-white text-[11px] leading-tight flex-1 min-w-0",children:cat.label})]})}))}),
-  c("div",{className:"mt-2.5 flex justify-center",children:(neCategories.length>0?neBuildQuickCategories(neCategories,f):NE_CATEGORIES).filter((cat)=>cat.n===17).map((cat)=>i("button",{key:cat.n,onClick:cat.action,className:"h-12 rounded-full ne-dgreen-bg flex items-center px-3 gap-1.5 w-1/2",children:c("span",{className:"flex items-center gap-1.5 min-w-0 w-full",children:[i("span",{className:"font-bold text-white text-[12px]",children:cat.n}),i("span",{style:{overflowWrap:"break-word",wordBreak:"break-word"},className:"font-semibold text-white text-[11px] leading-tight flex-1 min-w-0",children:cat.label})]})}))})
+  c("div",{className:"ne-rg gap-2",style:{"--ne-m":2,"--ne-d":4},children:(neCategories.length>0?neBuildQuickCategories(neCategories,f):NE_CATEGORIES).filter((cat)=>cat.n<=16).map((cat)=>i("button",{key:cat.n,onClick:cat.action,className:"h-12 rounded-full ne-dgreen-bg flex items-center px-3 gap-1.5 text-left",children:c("span",{className:"flex items-center gap-1.5 min-w-0 w-full",children:[i("span",{className:"font-bold text-white text-[12px]",children:cat.n}),i("span",{style:{overflowWrap:"break-word",wordBreak:"break-word"},className:"font-semibold text-white text-[11px] leading-tight flex-1 min-w-0",children:cat.label})]})}))}),
+  c("div",{className:"mt-2.5 flex justify-center",style:{marginTop:"8px"},children:(neCategories.length>0?neBuildQuickCategories(neCategories,f):NE_CATEGORIES).filter((cat)=>cat.n===17).map((cat)=>i("button",{key:cat.n,onClick:cat.action,className:"h-12 rounded-full ne-dgreen-bg flex items-center px-3 gap-1.5 text-left ne-qc17",children:c("span",{className:"flex items-center gap-1.5 min-w-0 w-full",children:[i("span",{className:"font-bold text-white text-[12px]",children:cat.n}),i("span",{style:{overflowWrap:"break-word",wordBreak:"break-word"},className:"font-semibold text-white text-[11px] leading-tight flex-1 min-w-0",children:cat.label})]})}))})
 ] : (()=>{
   const design=neGetPublicHomeDesign(e.settings.publicHomeDesign);
   const cnt=neHomeCategoryCount(design);
@@ -2534,6 +2586,8 @@ c("div",{className:"mt-6",children: (()=>{
   // meaningful for the vertical/default grid layout below (Horizontal/Swipe
   // already render as a single flat row via orient.itemStyle instead).
   const qcColsClass=neSectionColumnsClass(visDesign);
+  const qcGrid=neGridSpec(visDesign,"tile",2,4);
+  const qcTileW=neSizeTileWidthPx(visDesign,"tile");
   // Round 8d: neLockNoBoxBackground makes "No Box" win over Colour
   // permanently (see its definition), regardless of which was set first.
   // Bug fix (this round, responsive-spacing audit): sizeStyle.height is a
@@ -2566,7 +2620,7 @@ c("div",{className:"mt-6",children: (()=>{
   // beats a geometrically perfect circle in the rare case content doesn't
   // fit one).
   const {height:qcSizeHeight,...qcSizeStyleRest}=sizeStyle;
-  const tileStyle=neLockNoBoxBackground({...shapeStyle,...qcSizeStyleRest,...(qcSizeHeight?{minHeight:qcSizeHeight}:{}),...fontSizeStyle,...colorStyle,...fontColorStyle,...fontExtraStyle,...(orient?orient.itemStyle:{})},visDesign&&visDesign.categoryShape);
+  const tileStyle=neLockNoBoxBackground({...shapeStyle,...qcSizeStyleRest,...(qcSizeHeight?{minHeight:qcSizeHeight}:{}),...fontSizeStyle,...colorStyle,...fontColorStyle,...fontExtraStyle,...(orient?orient.itemStyle:{}),...(orient?{width:(qcTileW||160)+"px",minWidth:(qcTileW||160)+"px"}:{})},visDesign&&visDesign.categoryShape);
   // ne-dgreen-bg is !important in the stylesheet and would block an inline
   // backgroundColor override; drop it whenever a background is set for this
   // section, whether from Colour OR from Shape="none" ("No Box", round 8 --
@@ -2656,7 +2710,7 @@ c("div",{className:"mt-6",children: (()=>{
     const tiles=list.map((cat)=>mkTile(cat));
     return orient
       ? [c("div",{style:orient.containerStyle,className:orient.containerClassName,children:tiles})]
-      : [c("div",{className:"grid "+(qcColsClass||"grid-cols-2")+" gap-2",children:tiles})];
+      : [c("div",{className:qcGrid.className+" gap-2",style:qcGrid.style,children:tiles})];
   }
   if(cnt!==null){
     // Backward compatibility only: an older saved design that already set an
@@ -2669,7 +2723,7 @@ c("div",{className:"mt-6",children: (()=>{
     const tiles=list.map((cat)=>mkTile(cat));
     return orient
       ? [c("div",{style:orient.containerStyle,className:orient.containerClassName,children:tiles})]
-      : [c("div",{className:"grid "+(qcColsClass||"grid-cols-2")+" gap-2",children:tiles})];
+      : [c("div",{className:qcGrid.className+" gap-2",style:qcGrid.style,children:tiles})];
   }
   // Count left unset: shape/size/orientation are presentation-only and must
   // NEVER change the count, the data source, or remove the legacy 17th-item
@@ -2685,8 +2739,8 @@ c("div",{className:"mt-6",children: (()=>{
   // Vertical (or orientation unset): preserve the EXACT legacy 16+17
   // two-block structure, count, and data source — only restyling each tile.
   return [
-    c("div",{className:"grid "+(qcColsClass||"grid-cols-2")+" gap-2",children:legacyList.filter((cat)=>cat.n<=16).map((cat)=>mkTile(cat))}),
-    c("div",{className:"mt-2.5 flex justify-center",children:legacyList.filter((cat)=>cat.n===17).map((cat)=>mkTile(cat,{width:"50%"}))})
+    c("div",{className:qcGrid.className+" gap-2",style:qcGrid.style,children:legacyList.filter((cat)=>cat.n<=16).map((cat)=>mkTile(cat))}),
+    c("div",{className:"mt-2.5 flex justify-center",style:{marginTop:"8px",...(qcGrid.className==="ne-rg"?qcGrid.style:{})},children:legacyList.filter((cat)=>cat.n===17).map((cat)=>c("div",{key:cat.n,className:qcGrid.className==="ne-rg"?"ne-qc17":"",style:qcGrid.className==="ne-rg"?undefined:{width:"min(100%, "+(qcTileW||160)+"px)"},children:mkTile(cat)}))})
   ];
 })()})]})),(neHomeSectionEnabled(neGetPublicHomeDesign(e.settings.publicHomeDesign),"featured")&&c("div",{style:neHomeSectionOrderStyle(neGetPublicHomeDesign(e.settings.publicHomeDesign),"featured"),children:[
 c("div",{className:"mt-10",children:[
@@ -2717,7 +2771,11 @@ c("div",{className:"mt-10",children:[
     // !important ne-dgreen-bg class did elsewhere, but the lock still keeps
     // this section consistent with the other 6).
     const featM=neFeaturedCardMetrics(featVis);
-    const cardStyle=neLockNoBoxBackground({minHeight:featM.h+"px",...featShape,...featColor},featVis&&featVis.categoryShape);
+    // Card WIDTH now follows Size too (previously only the height changed,
+    // so the card looked frozen while just the picture inside resized).
+    const featGrid=neGridSpec(featVis,"featured",2,4);
+    const featW=neSizeTileWidthPx(featVis,"featured")||170;
+    const cardStyle=neLockNoBoxBackground({minHeight:featM.h+"px",...featShape,...featColor,...(featOrient?{flex:"0 0 auto",width:featW+"px",maxWidth:"85vw"}:{})},featVis&&featVis.categoryShape);
     const featured=e.articles.filter((a)=>Array.isArray(a.categories)&&a.categories.includes("Featured"));
     if(featured.length===0){
       return c("div",{className:"p-8 rounded-2xl bg-gray-50 text-center",children:[i("div",{className:"text-gray-500 font-semibold",children:"No featured content yet."}),i("div",{className:"text-gray-400 text-[13px] mt-1",children:"Super Admin can feature published articles here."})]});
@@ -2736,10 +2794,10 @@ c("div",{className:"mt-10",children:[
     ]},a.id));
     if(featOrient) return c("div",{style:featOrient.containerStyle,className:featOrient.containerClassName,children:cards});
     if(featVis&&featVis.categoryOrientation==="vertical"&&!featColsClass) return c("div",{className:"flex flex-col gap-3",children:cards});
-    return c("div",{className:"grid "+(featColsClass||"grid-cols-2")+" gap-3",children:cards});
+    return c("div",{className:featGrid.className+" gap-3",style:featGrid.style,children:cards});
   })()
 ]})]}))]}),
-c("div",{className:"mt-10 grid md:grid-cols-12 gap-4",children:[c("div",{className:"md:col-span-8",children:[neHomeSectionEnabled(neGetPublicHomeDesign(e.settings.publicHomeDesign),"exploreByTopic")&&(()=>{
+c("div",{className:"mt-10 grid md:grid-cols-12 gap-4",children:[c("div",{className:"md:col-span-8 min-w-0",children:[neHomeSectionEnabled(neGetPublicHomeDesign(e.settings.publicHomeDesign),"exploreByTopic")&&(()=>{
   const nedesign=neGetPublicHomeDesign(e.settings.publicHomeDesign);
   // Round 5: Explore by Topic's OWN shape/size/orientation, independent from
   // Quick Categories Grid and All Categories (falls back to the old shared
@@ -2758,6 +2816,7 @@ c("div",{className:"mt-10 grid md:grid-cols-12 gap-4",children:[c("div",{classNa
   // same reasoning as Font Size/Colour/Font Colour above.
   const neFontExtraOv=neSectionFontExtraStyle(nedesignVis);
   const neColsClassOv=neSectionColumnsClass(nedesignVis);
+  const neExploreGrid=neGridSpec(nedesignVis,"tile",2,4);
   const nevisual=neCategoryVisualActive(nedesignVis)||Object.keys(neFontSizeOv).length>0||Object.keys(neColorOv).length>0||Object.keys(neFontColorOv).length>0||Object.keys(neFontExtraOv).length>0||neColsClassOv!=="";
   const netopics=[{label:"Tribes & Communities",icon:In,count:e.articles.filter((a)=>Array.isArray(a.categories)&&a.categories.includes("Tribes & Communities")).length,action:()=>f({type:"category",data:{name:"Tribes & Communities"}})},{label:"Tribal Dictionary",icon:Rn,count:e.articles.filter((a)=>Array.isArray(a.categories)&&a.categories.includes("Tribal Dictionary")).length,action:()=>f({type:"category",data:{name:"Tribal Dictionary"}})},{label:"History & Heritage",icon:bn,count:e.articles.filter((a)=>Array.isArray(a.categories)&&a.categories.includes("History & Heritage")).length,action:()=>f({type:"category",data:{name:"History & Heritage"}})},{label:"Culture & Traditions",icon:Ar,count:e.articles.filter((a)=>Array.isArray(a.categories)&&a.categories.includes("Culture & Traditions")).length,action:()=>f({type:"category",data:{name:"Culture & Traditions"}})},{label:"People of Northeast India",icon:Ft,count:e.articles.filter((a)=>Array.isArray(a.categories)&&a.categories.includes("People of Northeast India")).length,action:()=>f({type:"category",data:{name:"People of Northeast India"}})},{label:"Tourist Spots & Places",icon:Ht,count:e.articles.filter((a)=>Array.isArray(a.categories)&&a.categories.includes("Tourist Spots & Places")).length,action:()=>f({type:"category",data:{name:"Tourist Spots & Places"}})},{label:"Stories & Oral Traditions",icon:ln,count:e.articles.filter((a)=>Array.isArray(a.categories)&&a.categories.includes("Stories & Oral Traditions")).length,action:()=>f({type:"category",data:{name:"Stories & Oral Traditions"}})},{label:"Food & Cuisine",icon:Mn,count:e.articles.filter((a)=>Array.isArray(a.categories)&&a.categories.includes("Food & Cuisine")).length,action:()=>f({type:"category",data:{name:"Food & Cuisine"}})}];
   if(!nevisual){
@@ -2779,7 +2838,7 @@ c("div",{className:"mt-10 grid md:grid-cols-12 gap-4",children:[c("div",{classNa
   return c(tl,{children:[(()=>{const t=neTitleStyle("exploreByTopicHeading");return i("h3",{style:t.style,className:"text-[22px] font-bold "+(t.hasColor?"":"text-[#1a237e]"),children:"Explore by Topic"});})(),
     nev.orient
       ? c("div",{style:nev.orient.containerStyle,className:"mt-3 "+nev.orient.containerClassName,children:netiles})
-      : c("div",{className:"mt-3 grid "+(neColsClassOv||"grid-cols-2 md:grid-cols-4")+" gap-3",children:netiles})
+      : c("div",{className:"mt-3 "+neExploreGrid.className+" gap-3",style:neExploreGrid.style,children:netiles})
   ]});
 })(),neHomeSectionEnabled(neGetPublicHomeDesign(e.settings.publicHomeDesign),"allCategories")&&(()=>{
   const nedesign2=neGetPublicHomeDesign(e.settings.publicHomeDesign);
@@ -2811,10 +2870,17 @@ c("div",{className:"mt-10 grid md:grid-cols-12 gap-4",children:[c("div",{classNa
   // once the admin explicitly picks a column count, so no existing design
   // is ever changed by this feature's mere existence.
   const neAllCatColsClassOv=neSectionColumnsClass(nedesign2Vis);
-  const allCatTileActive=neAllCatColsClassOv!=="";
+  // Fix: Columns no longer switches to a separate white-card tile mode (that
+  // mode collapsed tiles to ~17px and lost the green box). The same green
+  // rows are kept and simply arranged by the shared responsive grid rule.
+  const allCatTileActive=false;
+  const allCatGrid=neGridSpec(nedesign2Vis,"row",1,3);
+  const allCatTileW=neSizeTileWidthPx(nedesign2Vis,"row");
+  const allCatMultiCol=!allCatOrient&&!!nedesign2Vis&&typeof nedesign2Vis.sectionColumns==="number"&&nedesign2Vis.sectionColumns>1;
   // Round 8d: neLockNoBoxBackground makes "No Box" win over Colour
   // permanently, regardless of merge order or which was set first.
-  const rowStyle=neLockNoBoxBackground({...allCatShape,...allCatSize,...neFontSizeOv2,...neColorOv2,...neFontColorOv2,...neFontExtraOv2,...(allCatOrient?allCatOrient.itemStyle:{})},nedesign2Vis&&nedesign2Vis.categoryShape);
+  const {height:allCatSizeH,...allCatSizeRest}=allCatSize;
+  const rowStyle=neLockNoBoxBackground({...allCatShape,...allCatSizeRest,...(allCatSizeH?{minHeight:allCatSizeH}:{}),paddingTop:"6px",paddingBottom:"6px",overflowWrap:"break-word",wordBreak:"break-word",gap:"8px",...(allCatMultiCol?{paddingLeft:"12px",paddingRight:"12px",...(nedesign2Vis&&nedesign2Vis.categoryShape?{}:{borderRadius:"16px"})}:{}),...neFontSizeOv2,...neColorOv2,...neFontColorOv2,...neFontExtraOv2,...(allCatOrient?allCatOrient.itemStyle:{}),...(allCatOrient&&allCatTileW?{width:allCatTileW+"px",minWidth:allCatTileW+"px"}:{})},nedesign2Vis&&nedesign2Vis.categoryShape);
   // ne-dgreen-bg is !important in the stylesheet and would block an inline
   // backgroundColor override; drop it whenever a background is set for this
   // section, whether from Colour OR from Shape="none" ("No Box", round 8 --
@@ -2864,7 +2930,7 @@ c("div",{className:"mt-10 grid md:grid-cols-12 gap-4",children:[c("div",{classNa
     : NE_MASTER_CATEGORIES.map((cat)=>i("button",{key:cat.name,onClick:()=>{if(cat.action)cat.action();else alert("This content type (photos/video) needs real media storage that is not connected yet.")},style:rowStyle,className:rowClass+(cat.action?"":" opacity-70"),children:cat.name}))).concat(neHomeCatExtraRows);
   const listContainer = allCatOrient
     ? c("div",{style:allCatOrient.containerStyle,className:allCatOrient.containerClassName,children:listBody})
-    : c("div",{className:"space-y-3",children:listBody});
+    : c("div",{className:allCatGrid.className+" gap-3",style:allCatGrid.style,children:listBody});
   // Round 13: tile-grid mode, built ONLY when allCatTileActive (Columns
   // explicitly set) -- "like Explore by Topic" per the user's request, so
   // this reuses the EXACT same content-agnostic tile helper
@@ -3953,7 +4019,7 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
             ]}),
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Size"}),
-            i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Responsive on desktop and mobile. None keeps today's exact size for a ticked section."}),
+            i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Changes the whole tile or card, width and height, and its text. A bigger Size means fewer, bigger tiles per row on every screen (when Columns is None). None keeps the section's normal size."}),
             c("select",{value:neBulkSize,onChange:(ev)=>{const v=ev.target.value;setNeBulkSize(v);neSetSectionCategorySize(neDesignSelectedSection,v);if(v==="custom")neSetSectionCategorySizeCustom(neDesignSelectedSection,{height:neBulkSizeCustomHeight});},className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
               i("option",{value:"default",children:"None (Standard)"}),
               i("option",{value:"smaller",children:"Smaller"}),i("option",{value:"standard",children:"Standard"}),
@@ -3964,7 +4030,7 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
               i("span",{className:"text-[11px] text-gray-500",children:"Height (px)"}),
               i("input",{type:"number",value:neBulkSizeCustomHeight,onChange:(ev)=>{const v=Number(ev.target.value)||48;setNeBulkSizeCustomHeight(v);neSetSectionCategorySizeCustom(neDesignSelectedSection,{height:v});},className:"w-20 h-8 px-2 rounded border text-[12px]"})
             ]}),
-            neDesignSelectedSection==="featured"&&i("p",{className:"mt-1 text-[11px] text-gray-400",children:"Today's Featured card height: Smaller 180px, Standard 220px, Medium 260px, Large 320px. Custom accepts 140 to 600px. Text size grows with the card, and a long title makes the card taller instead of being cut off."}),
+            neDesignSelectedSection==="featured"&&i("p",{className:"mt-1 text-[11px] text-gray-400",children:"Today's Featured card (width × height): Smaller 140×180, Standard 170×220, Medium 210×260, Large 260×320. Custom accepts a height of 140 to 600px (width follows). Text grows with the card, and a long title makes the card taller instead of being cut off."}),
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Box width"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Shrinks and centers the whole selected section (1-100%). Leave blank for the existing full width."}),
@@ -3993,7 +4059,7 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
 
             ...(["quickCategories","exploreByTopic","featured","allCategories"].includes(neDesignSelectedSection)?[
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Columns"}),
-            i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Quick Categories Grid, Explore by Topic, and Today's Featured are already grids. All Categories is normally a list of full-width rows — picking a column count here switches it into a tile grid like Explore by Topic; leaving it at None keeps it as rows. The count chosen here applies at every screen width, including mobile. Has no visible effect on a section whose Orientation is set to Horizontal or Swipe."}),
+            i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"How many per row on a PHONE. A computer automatically shows double (at most 6). None lets the screen decide: 2 per row on a phone and 4 on a computer (All Categories: 1 and 3), or fits as many as the chosen Size allows. Has no effect when Orientation is Horizontal or Swipe."}),
             c("select",{value:neBulkColumns,onChange:(ev)=>{const v=ev.target.value;setNeBulkColumns(v);neSetSectionColumns(neDesignSelectedSection,v);},className:"mt-2 h-9 px-3 rounded-lg border text-[13px]",children:[
               i("option",{value:"default",children:"None (today's columns)"}),
               i("option",{value:"1",children:"1"}),i("option",{value:"2",children:"2"}),i("option",{value:"3",children:"3"}),
