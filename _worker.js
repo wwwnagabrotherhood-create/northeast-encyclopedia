@@ -185,6 +185,60 @@ function getTokenFromRequest(req){
   return null;
 }
 
+
+// ---------------------------------------------------------------------------
+// Photo delivery (performance fix). Photos stay stored in D1 exactly as
+// before (D1 remains the only source of truth); list endpoints now send a
+// small image link instead of the whole base64 photo, and the photo bytes are
+// served by GET /api/d1/image/<type>/<id>?v=<version>. The version changes
+// whenever the stored photo changes, so the browser may cache each photo
+// permanently without ever showing an outdated one.
+// ---------------------------------------------------------------------------
+const NE_IMAGE_SOURCES = { article:['articles','imageUrl'], story:['stories','imageUrl'], media:['media','fileData'], tribe:['tribes','imageUrl'], person:['people','imageUrl'], place:['places','imageUrl'] };
+const neColumnCache = {};
+async function neTableColumns(d1, table){
+  if(neColumnCache[table]) return neColumnCache[table];
+  try{
+    const r = await d1.prepare("PRAGMA table_info("+table+")").all();
+    const cols = (r.results||[]).map((x)=>x.name).filter(Boolean);
+    if(cols.length) neColumnCache[table] = cols;
+    return cols;
+  }catch(e){ return []; }
+}
+function neImgVersion(len, tail){
+  let h = 0; const t = String(tail||'');
+  for(let i=0;i<t.length;i++){ h = (h*31 + t.charCodeAt(i))|0; }
+  return String(len||0)+'-'+(h>>>0).toString(36);
+}
+// Builds "SELECT <every column except the photo>, <photo link parts> FROM ..."
+// so the large photo text is not even read out of D1 for list requests.
+async function neSelectWithImageRef(d1, table, imgCol, tailSql){
+  const cols = await neTableColumns(d1, table);
+  if(!cols.length) return d1.prepare("SELECT * FROM "+table+" "+(tailSql||""));
+  const sel = cols.filter((c)=>c!==imgCol).map((c)=>'"'+c.replace(/"/g,'')+'"').join(',');
+  return d1.prepare("SELECT "+sel+", CASE WHEN "+imgCol+" LIKE 'data:%' THEN NULL ELSE "+imgCol+" END AS __imgRaw, length("+imgCol+") AS __imgLen, substr("+imgCol+", -24) AS __imgTail FROM "+table+" "+(tailSql||""));
+}
+function neAttachImageRef(row, type, imgCol){
+  if(!row) return row;
+  const out = {...row};
+  let raw, len, tail;
+  if(Object.prototype.hasOwnProperty.call(out,'__imgLen')){
+    raw = out.__imgRaw; len = out.__imgLen; tail = out.__imgTail;
+    delete out.__imgRaw; delete out.__imgLen; delete out.__imgTail;
+  } else {
+    const v = out[imgCol];
+    if(typeof v==='string' && v.indexOf('data:')===0){ raw = null; len = v.length; tail = v.slice(-24); } else { raw = v; len = v ? String(v).length : 0; }
+  }
+  if(raw) out[imgCol] = raw;
+  else if(len>0) out[imgCol] = '/api/d1/image/'+type+'/'+encodeURIComponent(out.id)+'?v='+neImgVersion(len, tail);
+  else out[imgCol] = '';
+  return out;
+}
+function neIsImageRef(v){ return typeof v==='string' && v.indexOf('/api/d1/image/')===0; }
+// A save that sends back an image link (photo unchanged) keeps the stored
+// photo; an empty value removes it; a new data URL replaces it.
+function neKeepImage(incoming, existing){ return neIsImageRef(incoming) ? (existing||'') : (incoming||''); }
+
 function jsonResponse(obj, status=200, extraHeaders={}){
   return new Response(JSON.stringify(obj),{
     status,
@@ -193,6 +247,7 @@ function jsonResponse(obj, status=200, extraHeaders={}){
       'Access-Control-Allow-Origin':'*',
       'Access-Control-Allow-Methods':'GET,POST,OPTIONS',
       'Access-Control-Allow-Headers':'Content-Type,Authorization',
+      'Cache-Control':'no-store',
       ...extraHeaders
     }
   });
@@ -538,7 +593,7 @@ ALTER TABLE contributors ADD COLUMN statusPermanent INTEGER DEFAULT 0;
 -- is created as 'pending' the moment someone opens the QR/UPI flow with a
 -- confirmed amount - never as 'successful', since this site has no payment
 -- gateway/webhook to confirm a real UPI transfer. No status here is ever
--- invented; it only reflects what was actually entered.
+-- invented, it only reflects what was actually entered.
 CREATE TABLE IF NOT EXISTS donations (
   id TEXT PRIMARY KEY,
   amount REAL,
@@ -619,6 +674,11 @@ CREATE TABLE IF NOT EXISTS visitor_sessions (
   activeSeconds INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_visitor_sessions_lastSeen ON visitor_sessions(lastSeenAt);
+CREATE INDEX IF NOT EXISTS idx_visitor_sessions_contributor ON visitor_sessions(contributorId);
+CREATE INDEX IF NOT EXISTS idx_articles_authorId ON articles(authorId);
+CREATE INDEX IF NOT EXISTS idx_stories_authorId ON stories(authorId);
+CREATE INDEX IF NOT EXISTS idx_dictionary_contributor ON dictionary(contributor);
+CREATE INDEX IF NOT EXISTS idx_suggestions_contributor ON suggestions(contributorId);
 `.split(';');
     const initErrors = [];
     for(let stmt of statements){
@@ -630,31 +690,40 @@ CREATE INDEX IF NOT EXISTS idx_visitor_sessions_lastSeen ON visitor_sessions(las
   }catch(e){ return { ok: false, errors: [{stmt:'(outer)', error: e.message}] }; }
 }
 
-async function d1GetAllData(env){
+async function d1GetAllData(env, opts){
   if(!env.NE_ENCYCLOPEDIA_D1) return null;
   const d1 = env.NE_ENCYCLOPEDIA_D1;
   let neInit=null;
   try{
     neInit = await initD1Tables(d1);
-    const articles = await d1.prepare("SELECT * FROM articles ORDER BY updatedAt DESC").all();
-    const tribes = await d1.prepare("SELECT * FROM tribes ORDER BY name ASC").all();
-    const people = await d1.prepare("SELECT * FROM people ORDER BY name ASC").all();
-    const places = await d1.prepare("SELECT * FROM places ORDER BY name ASC").all();
-    const dict = await d1.prepare("SELECT * FROM dictionary ORDER BY word ASC").all();
-    const stories = await d1.prepare("SELECT * FROM stories ORDER BY updatedAt DESC").all();
-    const submissions = await d1.prepare("SELECT * FROM submissions WHERE status='pending' ORDER BY timestamp DESC").all();
-    const revisions = await d1.prepare("SELECT * FROM revisions ORDER BY timestamp DESC LIMIT 100").all();
-    const donations = await d1.prepare("SELECT * FROM donations ORDER BY createdAt DESC LIMIT 200").all();
+    const full = opts && opts.includePrivate;
+    const stmts = [
+      await neSelectWithImageRef(d1, "tribes", "imageUrl", "ORDER BY name ASC"),
+      await neSelectWithImageRef(d1, "people", "imageUrl", "ORDER BY name ASC"),
+      await neSelectWithImageRef(d1, "places", "imageUrl", "ORDER BY name ASC"),
+      d1.prepare("SELECT * FROM dictionary ORDER BY word ASC"),
+      await neSelectWithImageRef(d1, "stories", "imageUrl", full ? "ORDER BY updatedAt DESC" : "WHERE verified=1 OR authorId=? ORDER BY updatedAt DESC")
+    ];
+    if(!full) stmts[4] = stmts[4].bind(String((opts && opts.viewerContributorId) || '__none__'));
+    if(full){
+      stmts.push(d1.prepare("SELECT * FROM submissions WHERE status='pending' ORDER BY timestamp DESC"));
+      stmts.push(d1.prepare("SELECT * FROM revisions ORDER BY timestamp DESC LIMIT 100"));
+      stmts.push(d1.prepare("SELECT * FROM donations ORDER BY createdAt DESC LIMIT 200"));
+    }
+    const res = await d1.batch(stmts);
+    const rows = (i)=>(res[i] && res[i].results) || [];
     return {
-      articles: articles.results || [],
-      tribes: tribes.results || [],
-      people: people.results || [],
-      places: places.results || [],
-      dict: dict.results || [],
-      stories: stories.results || [],
-      submissions: submissions.results || [],
-      revisions: revisions.results || [],
-      donations: donations.results || []
+      articles: [],
+      tribes: rows(0).map((r)=>neAttachImageRef(r,'tribe','imageUrl')),
+      people: rows(1).map((r)=>neAttachImageRef(r,'person','imageUrl')),
+      places: rows(2).map((r)=>neAttachImageRef(r,'place','imageUrl')),
+      dict: rows(3),
+      stories: rows(4).map((r)=>neAttachImageRef(r,'story','imageUrl')),
+      // Private data (pending submissions, revision history, donations) is
+      // only ever returned to Super Admin.
+      submissions: full ? rows(5) : [],
+      revisions: full ? rows(6) : [],
+      donations: full ? rows(7) : []
     };
   }catch(e){ return {error: e.message, initErrors: neInit?neInit.errors:null}; }
 }
@@ -787,10 +856,44 @@ export default {
       return jsonResponse({success:true,message:'D1 tables initialized'});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
+  if(path.indexOf('/api/d1/image/')===0 && request.method==='GET'){
+    try{
+      if(!env.NE_ENCYCLOPEDIA_D1) return jsonResponse({success:false,error:'D1 not configured'},503);
+      const parts = path.split('/');
+      const src = NE_IMAGE_SOURCES[parts[4]];
+      const id = decodeURIComponent(parts.slice(5).join('/')||'');
+      if(!src || !id) return jsonResponse({success:false,error:'Not found'},404);
+      const row = await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT "+src[1]+" AS v FROM "+src[0]+" WHERE id=?").bind(id).first();
+      const v = row && row.v;
+      if(!v || typeof v!=='string') return jsonResponse({success:false,error:'Not found'},404);
+      if(v.indexOf('data:')!==0){
+        if(/^https?:\/\//i.test(v)) return Response.redirect(v, 302);
+        return jsonResponse({success:false,error:'Not found'},404);
+      }
+      const comma = v.indexOf(',');
+      const meta = v.slice(5, comma);
+      const isB64 = /;base64/i.test(meta);
+      const mime = (meta.split(';')[0]||'').toLowerCase();
+      const payload = v.slice(comma+1);
+      let bytes;
+      if(isB64){ const bin = atob(payload); bytes = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i); }
+      else { bytes = new TextEncoder().encode(decodeURIComponent(payload)); }
+      const safeImage = /^image\/(jpeg|jpg|png|gif|webp|avif|bmp)$/.test(mime);
+      return new Response(bytes, { headers: {
+        'Content-Type': safeImage ? mime : 'application/octet-stream',
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'X-Content-Type-Options': 'nosniff',
+        ...(safeImage ? {} : {'Content-Disposition':'attachment'})
+      }});
+    }catch(e){ return jsonResponse({success:false,error:e.message},500); }
+  }
   if(path==='/api/d1/all-data' && request.method==='GET'){
     try{
       if(!env.NE_ENCYCLOPEDIA_D1) return jsonResponse({success:false,error:'D1 not configured - using localStorage fallback'},503);
-      const data = await d1GetAllData(env);
+      const neTok0 = getTokenFromRequest(request);
+      const nePay0 = neTok0 ? await verifyJWT(neTok0, getJwtSecret(env), env) : null;
+      const neActor0 = await neResolveActor(request, env);
+      const data = await d1GetAllData(env, { includePrivate: !!(nePay0 && nePay0.role==='SUPER_ADMIN'), viewerContributorId: (neActor0 && neActor0.actorType==='contributor') ? neActor0.actorId : '' });
       if(data && data.error) return jsonResponse({success:false,error:data.error,initErrors:data.initErrors||null},500);
       // Issue-1 correction pass: privacy-project Articles/Stories/
       // Dictionary Words only. Every other content type this already
@@ -822,7 +925,8 @@ export default {
     try{
       if(!env.NE_ENCYCLOPEDIA_D1) return jsonResponse({success:false,error:'D1 not configured'},503);
       await initD1Tables(env.NE_ENCYCLOPEDIA_D1);
-      const result = await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT * FROM articles WHERE verified=1 ORDER BY updatedAt DESC").all();
+      const result = await (await neSelectWithImageRef(env.NE_ENCYCLOPEDIA_D1, "articles", "imageUrl", "WHERE verified=1 ORDER BY updatedAt DESC")).all();
+      result.results = (result.results||[]).map((r)=>neAttachImageRef(r,"article","imageUrl"));
       // Issue-1 correction pass: same privacy projection as /api/d1/all-data.
       const token = getTokenFromRequest(request);
       const payload = token ? await verifyJWT(token, getJwtSecret(env), env) : null;
@@ -833,6 +937,16 @@ export default {
       const viewerContributorId = (actor && actor.actorType==='contributor') ? actor.actorId : '';
       const articles = (result.results||[]).map((r)=>neProjectContentRow(r,'article',isSuperAdmin,viewerContributorId));
       return jsonResponse({success:true,articles,staffAuthInvalid});
+    }catch(e){ return jsonResponse({success:false,error:e.message},500); }
+  }
+  if(path==='/api/d1/article-view' && request.method==='POST'){
+    try{
+      if(!env.NE_ENCYCLOPEDIA_D1) return jsonResponse({success:false,error:'D1 not configured'},503);
+      const body=await request.json().catch(()=>({}));
+      const id=(body.id||'').toString().slice(0,200);
+      if(!id) return jsonResponse({success:false,error:'id required'},400);
+      await env.NE_ENCYCLOPEDIA_D1.prepare("UPDATE articles SET views=COALESCE(views,0)+1 WHERE id=? AND verified=1").bind(id).run();
+      return jsonResponse({success:true});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
   if(path==='/api/d1/save-article' && request.method==='POST'){
@@ -858,7 +972,7 @@ export default {
       // unchanged. Other infobox fields the client legitimately edited are
       // preserved -- only the isAnonymous key within infobox is pinned to
       // the existing D1 value.
-      const existingArticle = await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT authorId, authorName, infobox FROM articles WHERE id=?").bind(a.id).first();
+      const existingArticle = await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT authorId, authorName, infobox, imageUrl, views FROM articles WHERE id=?").bind(a.id).first();
       let finalAuthorId, finalAuthorName, finalInfobox;
       if(existingArticle){
         finalAuthorId = existingArticle.authorId;
@@ -875,9 +989,9 @@ export default {
       ).bind(
         a.id, a.title, a.slug||a.title.toLowerCase().replace(/\s+/g,'-'), a.state||'', a.intro||'', a.content||'',
         JSON.stringify(a.categories||[]), JSON.stringify(a.tags||[]), JSON.stringify(a.references||a.references_list||[]),
-        a.imageUrl||'', a.imageCaption||'', a.imageCredit||'', JSON.stringify(finalInfobox),
+        neKeepImage(a.imageUrl, existingArticle&&existingArticle.imageUrl), a.imageCaption||'', a.imageCredit||'', JSON.stringify(finalInfobox),
         finalAuthorId, finalAuthorName, a.createdAt||new Date().toISOString(), new Date().toISOString(),
-        1, a.views||0, JSON.stringify(a.relatedIds||[])
+        1, existingArticle ? (Number(existingArticle.views)||0) : (Number(a.views)||0), JSON.stringify(a.relatedIds||[])
       ).run();
       return jsonResponse({success:true,message:'Article saved to D1 online'});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
@@ -921,10 +1035,15 @@ export default {
       const body=await request.json().catch(()=>({}));
       const don=body.donation;
       if(!don || !don.id || typeof don.amount!=='number' || !(don.amount>0)) return jsonResponse({success:false,error:'Valid donation id and amount required'},400);
-      const status=['pending','successful','failed'].includes(don.status) ? don.status : 'pending';
+      const neDonTok = getTokenFromRequest(request);
+      const neDonPay = neDonTok ? await verifyJWT(neDonTok, getJwtSecret(env), env) : null;
+      const neDonAdmin = !!(neDonPay && neDonPay.role==='SUPER_ADMIN');
+      // Only Super Admin may set a non-pending status or update an existing
+      // record; the public flow can only create a new pending donation.
+      const status=neDonAdmin && ['pending','successful','failed'].includes(don.status) ? don.status : 'pending';
       const nowIso=new Date().toISOString();
       await env.NE_ENCYCLOPEDIA_D1.prepare(
-        "INSERT OR REPLACE INTO donations (id,amount,status,transactionId,donor,upiId,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?)"
+        (neDonAdmin ? "INSERT OR REPLACE" : "INSERT OR IGNORE")+" INTO donations (id,amount,status,transactionId,donor,upiId,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?)"
       ).bind(
         don.id.toString().slice(0,100), don.amount, status,
         (don.transactionId||'').toString().slice(0,200), (don.donor||'Anonymous').toString().slice(0,200), (don.upiId||'').toString().slice(0,200),
@@ -994,7 +1113,7 @@ export default {
       // server-derived creation behavior unchanged. isAnonymous is also now
       // explicitly included below, so INSERT OR REPLACE no longer resets it
       // to its column default on every save.
-      const existingStory = await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT authorId, authorName, isAnonymous FROM stories WHERE id=?").bind(st.id).first();
+      const existingStory = await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT authorId, authorName, isAnonymous, imageUrl FROM stories WHERE id=?").bind(st.id).first();
       let finalAuthorId, finalAuthorName, finalIsAnonymous;
       if(existingStory){
         finalAuthorId = existingStory.authorId;
@@ -1009,7 +1128,7 @@ export default {
         "INSERT OR REPLACE INTO stories (id,title,state,intro,content,authorId,authorName,imageUrl,imageCaption,imageCredit,createdAt,updatedAt,verified,isAnonymous) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
       ).bind(
         st.id, st.title, st.state||'', st.intro||'', st.content, finalAuthorId, finalAuthorName,
-        st.imageUrl||'', st.imageCaption||'', st.imageCredit||'', st.createdAt||new Date().toISOString(), new Date().toISOString(), 1, finalIsAnonymous
+        neKeepImage(st.imageUrl, existingStory&&existingStory.imageUrl), st.imageCaption||'', st.imageCredit||'', st.createdAt||new Date().toISOString(), new Date().toISOString(), 1, finalIsAnonymous
       ).run();
       return jsonResponse({success:true,message:'Story saved to D1 online'});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
@@ -1023,6 +1142,11 @@ export default {
       if(!payload || !['SUPER_ADMIN','ADMIN','MODERATOR','EDITOR','CONTRIBUTOR'].includes(payload.role)) return jsonResponse({success:false,error:'Editor role required'},403);
       if(!env.NE_ENCYCLOPEDIA_D1) return jsonResponse({success:false,error:'D1 not configured'},500);
       await initD1Tables(env.NE_ENCYCLOPEDIA_D1);
+      if(payload.role==='CONTRIBUTOR'){
+        const neC = await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT status FROM contributors WHERE id=?").bind(payload.contributorId||'').first();
+        if(!neC) return jsonResponse({success:false,error:'Contributor not found'},404);
+        if(neC.status!=='ACTIVE') return jsonResponse({success:false,error:'Account is '+String(neC.status).toLowerCase()},403);
+      }
       const body=await request.json().catch(()=>({}));
       const id=body.id;
       if(!id) return jsonResponse({success:false,error:'Article id required'},400);
@@ -1032,6 +1156,10 @@ export default {
         return jsonResponse({success:false,error:'You can only delete content you authored'},403);
       }
       await env.NE_ENCYCLOPEDIA_D1.prepare("DELETE FROM articles WHERE id=?").bind(id).run();
+      if(payload.role==='CONTRIBUTOR'){
+        try{ await env.NE_ENCYCLOPEDIA_D1.prepare("UPDATE contributors SET lastActiveAt=? WHERE id=?").bind(new Date().toISOString(), payload.contributorId).run(); }catch(e){}
+        await logContributorAudit(env.NE_ENCYCLOPEDIA_D1, payload.contributorId, 'CONTRIBUTOR', 'contributor_article_deleted', id, '');
+      }
       return jsonResponse({success:true,message:'Article deleted from D1'});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
@@ -1044,6 +1172,11 @@ export default {
       if(!payload || !['SUPER_ADMIN','ADMIN','MODERATOR','EDITOR','CONTRIBUTOR'].includes(payload.role)) return jsonResponse({success:false,error:'Editor role required'},403);
       if(!env.NE_ENCYCLOPEDIA_D1) return jsonResponse({success:false,error:'D1 not configured'},500);
       await initD1Tables(env.NE_ENCYCLOPEDIA_D1);
+      if(payload.role==='CONTRIBUTOR'){
+        const neC = await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT status FROM contributors WHERE id=?").bind(payload.contributorId||'').first();
+        if(!neC) return jsonResponse({success:false,error:'Contributor not found'},404);
+        if(neC.status!=='ACTIVE') return jsonResponse({success:false,error:'Account is '+String(neC.status).toLowerCase()},403);
+      }
       const body=await request.json().catch(()=>({}));
       const id=body.id;
       if(!id) return jsonResponse({success:false,error:'Word id required'},400);
@@ -1053,6 +1186,10 @@ export default {
         return jsonResponse({success:false,error:'You can only delete content you authored'},403);
       }
       await env.NE_ENCYCLOPEDIA_D1.prepare("DELETE FROM dictionary WHERE id=?").bind(id).run();
+      if(payload.role==='CONTRIBUTOR'){
+        try{ await env.NE_ENCYCLOPEDIA_D1.prepare("UPDATE contributors SET lastActiveAt=? WHERE id=?").bind(new Date().toISOString(), payload.contributorId).run(); }catch(e){}
+        await logContributorAudit(env.NE_ENCYCLOPEDIA_D1, payload.contributorId, 'CONTRIBUTOR', 'contributor_word_deleted', id, '');
+      }
       return jsonResponse({success:true,message:'Word deleted from D1'});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
@@ -1065,6 +1202,11 @@ export default {
       if(!payload || !['SUPER_ADMIN','ADMIN','MODERATOR','EDITOR','CONTRIBUTOR'].includes(payload.role)) return jsonResponse({success:false,error:'Editor role required'},403);
       if(!env.NE_ENCYCLOPEDIA_D1) return jsonResponse({success:false,error:'D1 not configured'},500);
       await initD1Tables(env.NE_ENCYCLOPEDIA_D1);
+      if(payload.role==='CONTRIBUTOR'){
+        const neC = await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT status FROM contributors WHERE id=?").bind(payload.contributorId||'').first();
+        if(!neC) return jsonResponse({success:false,error:'Contributor not found'},404);
+        if(neC.status!=='ACTIVE') return jsonResponse({success:false,error:'Account is '+String(neC.status).toLowerCase()},403);
+      }
       const body=await request.json().catch(()=>({}));
       const id=body.id;
       if(!id) return jsonResponse({success:false,error:'Story id required'},400);
@@ -1074,6 +1216,10 @@ export default {
         return jsonResponse({success:false,error:'You can only delete content you authored'},403);
       }
       await env.NE_ENCYCLOPEDIA_D1.prepare("DELETE FROM stories WHERE id=?").bind(id).run();
+      if(payload.role==='CONTRIBUTOR'){
+        try{ await env.NE_ENCYCLOPEDIA_D1.prepare("UPDATE contributors SET lastActiveAt=? WHERE id=?").bind(new Date().toISOString(), payload.contributorId).run(); }catch(e){}
+        await logContributorAudit(env.NE_ENCYCLOPEDIA_D1, payload.contributorId, 'CONTRIBUTOR', 'contributor_story_deleted', id, '');
+      }
       return jsonResponse({success:true,message:'Story deleted from D1'});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
@@ -1089,12 +1235,12 @@ export default {
       const body=await request.json().catch(()=>({}));
       const t=body.tribe;
       if(!t || !t.id || !t.name) return jsonResponse({success:false,error:'Tribe id and name required'},400);
-      const existing=await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT createdAt FROM tribes WHERE id=?").bind(t.id).first();
+      const existing=await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT createdAt, imageUrl FROM tribes WHERE id=?").bind(t.id).first();
       await env.NE_ENCYCLOPEDIA_D1.prepare(
         "INSERT OR REPLACE INTO tribes (id,name,altNames,state,district,language,history,culture,festivals,food,clothing,arts,population,references_list,imageUrl,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
       ).bind(
         t.id, t.name, JSON.stringify(t.altNames||[]), t.state||'', t.district||'', t.language||'', t.history||'', t.culture||'',
-        t.festivals||'', t.food||'', t.clothing||'', t.arts||'', t.population||'', JSON.stringify(t.references||[]), t.imageUrl||'',
+        t.festivals||'', t.food||'', t.clothing||'', t.arts||'', t.population||'', JSON.stringify(t.references||[]), neKeepImage(t.imageUrl, existing&&existing.imageUrl),
         (existing&&existing.createdAt)||t.createdAt||new Date().toISOString(), new Date().toISOString()
       ).run();
       return jsonResponse({success:true,message:'Tribe saved to D1 online'});
@@ -1124,8 +1270,8 @@ export default {
     try{
       if(!env.NE_ENCYCLOPEDIA_D1) return jsonResponse({success:false,error:'D1 not configured'},503);
       await initD1Tables(env.NE_ENCYCLOPEDIA_D1);
-      const result = await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT * FROM people ORDER BY name ASC").all();
-      return jsonResponse({success:true,people: result.results||[]});
+      const result = await (await neSelectWithImageRef(env.NE_ENCYCLOPEDIA_D1, "people", "imageUrl", "ORDER BY name ASC")).all();
+      return jsonResponse({success:true,people: (result.results||[]).map((r)=>neAttachImageRef(r,"person","imageUrl"))});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
   if(path==='/api/d1/save-person' && request.method==='POST'){
@@ -1141,11 +1287,11 @@ export default {
       const p=body.person;
       if(!p || !p.id || !p.name) return jsonResponse({success:false,error:'Person id and name required'},400);
       if(p.imageUrl && p.imageUrl.length > 1000000) return jsonResponse({success:false,error:'Photo too large for D1 (must be <1MB).'},400);
-      const existing=await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT createdAt, authorId, authorName FROM people WHERE id=?").bind(p.id).first();
+      const existing=await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT createdAt, authorId, authorName, imageUrl FROM people WHERE id=?").bind(p.id).first();
       await env.NE_ENCYCLOPEDIA_D1.prepare(
         "INSERT OR REPLACE INTO people (id,name,role,state,bio,achievements,imageUrl,authorId,authorName,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
       ).bind(
-        p.id, p.name, p.role||'', p.state||'', p.bio||'', p.achievements||'', p.imageUrl||'',
+        p.id, p.name, p.role||'', p.state||'', p.bio||'', p.achievements||'', neKeepImage(p.imageUrl, existing&&existing.imageUrl),
         (existing&&existing.authorId)||payload.username, (existing&&existing.authorName)||payload.displayName,
         (existing&&existing.createdAt)||p.createdAt||new Date().toISOString(), new Date().toISOString()
       ).run();
@@ -1176,8 +1322,8 @@ export default {
     try{
       if(!env.NE_ENCYCLOPEDIA_D1) return jsonResponse({success:false,error:'D1 not configured'},503);
       await initD1Tables(env.NE_ENCYCLOPEDIA_D1);
-      const result = await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT * FROM places ORDER BY name ASC").all();
-      return jsonResponse({success:true,places: result.results||[]});
+      const result = await (await neSelectWithImageRef(env.NE_ENCYCLOPEDIA_D1, "places", "imageUrl", "ORDER BY name ASC")).all();
+      return jsonResponse({success:true,places: (result.results||[]).map((r)=>neAttachImageRef(r,"place","imageUrl"))});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
   if(path==='/api/d1/save-place' && request.method==='POST'){
@@ -1193,11 +1339,11 @@ export default {
       const pl=body.place;
       if(!pl || !pl.id || !pl.name) return jsonResponse({success:false,error:'Place id and name required'},400);
       if(pl.imageUrl && pl.imageUrl.length > 1000000) return jsonResponse({success:false,error:'Photo too large for D1 (must be <1MB).'},400);
-      const existing=await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT createdAt, authorId, authorName FROM places WHERE id=?").bind(pl.id).first();
+      const existing=await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT createdAt, authorId, authorName, imageUrl FROM places WHERE id=?").bind(pl.id).first();
       await env.NE_ENCYCLOPEDIA_D1.prepare(
         "INSERT OR REPLACE INTO places (id,name,type,state,district,description,significance,imageUrl,authorId,authorName,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
       ).bind(
-        pl.id, pl.name, pl.type||'', pl.state||'', pl.district||'', pl.description||'', pl.significance||'', pl.imageUrl||'',
+        pl.id, pl.name, pl.type||'', pl.state||'', pl.district||'', pl.description||'', pl.significance||'', neKeepImage(pl.imageUrl, existing&&existing.imageUrl),
         (existing&&existing.authorId)||payload.username, (existing&&existing.authorName)||payload.displayName,
         (existing&&existing.createdAt)||pl.createdAt||new Date().toISOString(), new Date().toISOString()
       ).run();
@@ -1237,14 +1383,14 @@ export default {
       if(!m || !m.id || !m.title) return jsonResponse({success:false,error:'Media id and title required'},400);
       if(!m.fileData) return jsonResponse({success:false,error:'Photo required'},400);
       if(m.fileData.length > 1000000) return jsonResponse({success:false,error:'Photo too large for D1 (must be <1MB). Gallery upload auto-compresses.'},400);
-      const existing=await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT authorId FROM media WHERE id=?").bind(m.id).first();
+      const existing=await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT authorId, fileData FROM media WHERE id=?").bind(m.id).first();
       if(existing && payload.role!=='SUPER_ADMIN' && existing.authorId!==payload.username){
         return jsonResponse({success:false,error:'You can only edit media you authored'},403);
       }
       await env.NE_ENCYCLOPEDIA_D1.prepare(
         "INSERT OR REPLACE INTO media (id,title,fileData,caption,credit,category,authorId,authorName,createdAt,updatedAt,verified) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
       ).bind(
-        m.id, m.title, m.fileData, m.caption||'', m.credit||'', m.category||'Community Photos',
+        m.id, m.title, neKeepImage(m.fileData, existing&&existing.fileData), m.caption||'', m.credit||'', m.category||'Community Photos',
         existing? existing.authorId : payload.username, m.authorName||payload.displayName,
         m.createdAt||new Date().toISOString(), new Date().toISOString(), 1
       ).run();
@@ -1281,8 +1427,8 @@ export default {
     try{
       if(!env.NE_ENCYCLOPEDIA_D1) return jsonResponse({success:false,error:'D1 not configured'},503);
       neInit = await initD1Tables(env.NE_ENCYCLOPEDIA_D1);
-      const result = await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT * FROM media WHERE verified=1 ORDER BY updatedAt DESC").all();
-      return jsonResponse({success:true,media: result.results||[]});
+      const result = await (await neSelectWithImageRef(env.NE_ENCYCLOPEDIA_D1, "media", "fileData", "WHERE verified=1 ORDER BY updatedAt DESC")).all();
+      return jsonResponse({success:true,media: (result.results||[]).map((r)=>neAttachImageRef(r,"media","fileData"))});
     }catch(e){ return jsonResponse({success:false,error:e.message,initErrors:neInit?neInit.errors:null},500); }
   }
   if(path==='/api/d1/submit' && request.method==='POST'){
@@ -1324,6 +1470,7 @@ export default {
       let data; try{ data=JSON.parse(subResult.data); }catch{ data={}; }
       // Generate the article id exactly once, up front, so both statements below use the identical id.
       const newArticleId = data.id || subResult.articleId || 'a'+Date.now()+Math.random().toString(36).slice(2,6);
+      if(neIsImageRef(data.imageUrl)){ try{ const ex = await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT imageUrl FROM articles WHERE id=?").bind(newArticleId).first(); data.imageUrl = (ex&&ex.imageUrl)||''; }catch(e){ data.imageUrl=''; } }
       const insertArticleStmt = env.NE_ENCYCLOPEDIA_D1.prepare(
         "INSERT OR REPLACE INTO articles (id,title,slug,state,intro,content,categories,tags,references_list,imageUrl,imageCaption,imageCredit,infobox,authorId,authorName,createdAt,updatedAt,verified,views,relatedIds) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
       ).bind(
@@ -1524,6 +1671,24 @@ export default {
       return jsonResponse({success:true,message:'Password updated',username:target,tokenVersion:user.tokenVersion});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
+  if(path==='/api/admin/delete-user' && request.method==='POST'){
+    try{
+      const token=getTokenFromRequest(request);
+      if(!token) return jsonResponse({success:false,error:'Auth required'},401);
+      const payload=await verifyJWT(token, getJwtSecret(env), env);
+      if(!payload || payload.role!=='SUPER_ADMIN') return jsonResponse({success:false,error:'SUPER_ADMIN only'},403);
+      const body=await request.json().catch(()=>({}));
+      const username=(body.username||'').toString().trim().toLowerCase();
+      if(!username) return jsonResponse({success:false,error:'username required'},400);
+      if(username==='benjamin' || username===String(payload.username||'').toLowerCase()) return jsonResponse({success:false,error:'This account cannot be deleted'},403);
+      const s=await env.NE_USERS_KV.get('user_'+username);
+      if(!s) return jsonResponse({success:false,error:'User not found'},404);
+      let u={}; try{ u=JSON.parse(s); }catch(e){}
+      if(u.role==='SUPER_ADMIN') return jsonResponse({success:false,error:'Super Admin accounts cannot be deleted here'},403);
+      await env.NE_USERS_KV.delete('user_'+username);
+      return jsonResponse({success:true,message:'User deleted',username});
+    }catch(e){ return jsonResponse({success:false,error:e.message},500); }
+  }
   if(path==='/api/admin/list-users' && request.method==='GET'){
     try{
       const token=getTokenFromRequest(request);
@@ -1531,7 +1696,14 @@ export default {
       const secret=getJwtSecret(env);
       const payload=await verifyJWT(token, secret, env);
       if(!payload || payload.role!=='SUPER_ADMIN') return jsonResponse({success:false,error:'SUPER_ADMIN only'},403);
-      const usernames=['benjamin','admin1','rini','editor_khasi'];
+      let usernames=['benjamin','admin1','rini','editor_khasi'];
+      try{
+        if(env.NE_USERS_KV && typeof env.NE_USERS_KV.list==='function'){
+          let cursor; const found=[];
+          do{ const page=await env.NE_USERS_KV.list({prefix:'user_', cursor}); (page.keys||[]).forEach((k)=>found.push(String(k.name).slice(5))); cursor=page.list_complete===false?page.cursor:undefined; }while(cursor);
+          if(found.length) usernames=Array.from(new Set(found.concat(['benjamin'])));
+        }
+      }catch(e){}
       let out=[];
       for(let u of usernames){
         let s=await env.NE_USERS_KV.get('user_'+u);
@@ -1637,6 +1809,8 @@ export default {
       const auth = await requireActiveContributor(request, env);
       if(auth.error) return auth.error;
       const { contributor, d1 } = auth;
+      // Activity: publishing/editing is contributor activity (Last Active).
+      try{ await d1.prepare("UPDATE contributors SET lastActiveAt=? WHERE id=?").bind(new Date().toISOString(), contributor.id).run(); }catch(e){}
       const body = await request.json().catch(()=>({}));
       const type = body.type;
       if(!NE_CONTRIB_TYPES.includes(type)) return jsonResponse({success:false,error:'Invalid contribution type'},400);
@@ -1651,8 +1825,10 @@ export default {
         const a = data;
         if(!a.title) return jsonResponse({success:false,error:'Title required'},400);
         let articleId = body.articleId || a.id;
+        let neExistingArt = null;
         if(articleId){
-          const existingArt = await d1.prepare("SELECT authorId FROM articles WHERE id=?").bind(articleId).first();
+          const existingArt = await d1.prepare("SELECT authorId, imageUrl, views FROM articles WHERE id=?").bind(articleId).first();
+          neExistingArt = existingArt;
           if(existingArt && existingArt.authorId !== contributor.id) return jsonResponse({success:false,error:'You can only edit your own content'},403);
         } else {
           articleId = 'a'+Date.now()+Math.random().toString(36).slice(2,6);
@@ -1662,9 +1838,9 @@ export default {
         ).bind(
           articleId, a.title, a.slug||a.title.toLowerCase().replace(/\s+/g,'-'), a.state||'', a.intro||'', a.content||'',
           JSON.stringify(a.categories||[]), JSON.stringify(a.tags||[]), JSON.stringify(a.references||[]),
-          a.imageUrl||'', a.imageCaption||'', a.imageCredit||'', JSON.stringify(a.infobox||{}),
+          neKeepImage(a.imageUrl, neExistingArt&&neExistingArt.imageUrl), a.imageCaption||'', a.imageCredit||'', JSON.stringify(a.infobox||{}),
           contributor.id, contributor.displayName, a.createdAt||new Date().toISOString(), new Date().toISOString(),
-          1, a.views||0, JSON.stringify(a.relatedIds||[])
+          1, neExistingArt ? (Number(neExistingArt.views)||0) : (Number(a.views)||0), JSON.stringify(a.relatedIds||[])
         ).run();
         await logContributorAudit(d1, contributor.id, 'CONTRIBUTOR', body.articleId?'contributor_article_updated':'contributor_article_published', articleId, a.title);
         return jsonResponse({success:true, id:articleId, message:'Published to D1'});
@@ -1702,8 +1878,10 @@ export default {
         if(!st.title) return jsonResponse({success:false,error:'Title is required'},400);
         if(!st.content) return jsonResponse({success:false,error:'Story content is required'},400);
         let storyId = body.articleId || st.id;
+        let neExistingStory = null;
         if(storyId){
-          const existingStory = await d1.prepare("SELECT authorId FROM stories WHERE id=?").bind(storyId).first();
+          const existingStory = await d1.prepare("SELECT authorId, imageUrl FROM stories WHERE id=?").bind(storyId).first();
+          neExistingStory = existingStory;
           if(existingStory && existingStory.authorId !== contributor.id) return jsonResponse({success:false,error:'You can only edit your own content'},403);
         } else {
           storyId = 's'+Date.now()+Math.random().toString(36).slice(2,6);
@@ -1712,7 +1890,7 @@ export default {
           "INSERT OR REPLACE INTO stories (id,title,state,intro,content,authorId,authorName,imageUrl,imageCaption,imageCredit,createdAt,updatedAt,verified,isAnonymous) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
         ).bind(
           storyId, st.title, st.state||'', st.intro||'', st.content, contributor.id, contributor.displayName,
-          st.imageUrl||'', st.imageCaption||'', st.imageCredit||'', st.createdAt||new Date().toISOString(), new Date().toISOString(), 1, st.isAnonymous?1:0
+          neKeepImage(st.imageUrl, neExistingStory&&neExistingStory.imageUrl), st.imageCaption||'', st.imageCredit||'', st.createdAt||new Date().toISOString(), new Date().toISOString(), 1, st.isAnonymous?1:0
         ).run();
         await logContributorAudit(d1, contributor.id, 'CONTRIBUTOR', body.articleId?'contributor_story_updated':'contributor_story_published', storyId, st.title);
         return jsonResponse({success:true, id:storyId, message:'Published to D1'});
@@ -1736,7 +1914,7 @@ export default {
   // real visitor/session tracking, for every applicable content type. One
   // actor-resolution helper is reused by every route below, instead of each
   // route inventing its own identity logic. ---
-  const NE_ENGAGEMENT_CONTENT_TYPES = ['article','story','word','media'];
+  const NE_ENGAGEMENT_CONTENT_TYPES = ['article','story','word','media','talk'];
   const NE_REACTION_TYPES = ['like','dislike'];
 
   // Resolves WHO is acting, without ever trusting a client-asserted
@@ -1954,6 +2132,9 @@ export default {
         await d1.prepare("INSERT INTO visitor_sessions (sessionId,userType,contributorId,firstSeenAt,lastSeenAt,activeSeconds) VALUES (?,?,?,?,?,0)")
           .bind(sessionId, userType, contributorId, nowIso, nowIso).run();
       }
+      if(contributorId){
+        try{ await d1.prepare("UPDATE contributors SET lastActiveAt=? WHERE id=? AND (lastActiveAt IS NULL OR lastActiveAt<?)").bind(nowIso, contributorId, new Date(now.getTime()-60000).toISOString()).run(); }catch(e){}
+      }
       return jsonResponse({success:true});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
@@ -2069,17 +2250,19 @@ export default {
       const d1 = env.NE_ENCYCLOPEDIA_D1;
       await initD1Tables(d1);
       await expireContributorStatuses(d1);
-      const list = await d1.prepare(
-        "SELECT id,displayName,country,stateRegion,joinedAt,status,contributionCount,lastActiveAt,statusSince,statusExpiresAt,statusPermanent FROM contributors ORDER BY joinedAt DESC"
-      ).all();
-      const totalC = await d1.prepare("SELECT COUNT(*) as n FROM contributors").first();
-      const activeC = await d1.prepare("SELECT COUNT(*) as n FROM contributors WHERE status='ACTIVE'").first();
-      const suspendedC = await d1.prepare("SELECT COUNT(*) as n FROM contributors WHERE status='SUSPENDED'").first();
-      const blockedC = await d1.prepare("SELECT COUNT(*) as n FROM contributors WHERE status='BLOCKED'").first();
-      const subTotal = await d1.prepare("SELECT COUNT(*) as n FROM submissions WHERE userRole='CONTRIBUTOR'").first();
-      const subPending = await d1.prepare("SELECT COUNT(*) as n FROM submissions WHERE userRole='CONTRIBUTOR' AND status='pending'").first();
-      const subApproved = await d1.prepare("SELECT COUNT(*) as n FROM submissions WHERE userRole='CONTRIBUTOR' AND status='approved'").first();
-      const subRejected = await d1.prepare("SELECT COUNT(*) as n FROM submissions WHERE userRole='CONTRIBUTOR' AND status='rejected'").first();
+      // Contribution count and Last Active are calculated live from the real
+      // content and activity records on every request (previously stored
+      // counters that direct publishing never updated). One D1 round trip.
+      const neRes = await d1.batch([
+        d1.prepare("SELECT c.id,c.displayName,c.country,c.stateRegion,c.joinedAt,c.status,c.statusSince,c.statusExpiresAt,c.statusPermanent, (SELECT COUNT(*) FROM articles WHERE authorId=c.id)+(SELECT COUNT(*) FROM stories WHERE authorId=c.id)+(SELECT COUNT(*) FROM dictionary WHERE contributor=c.id) AS contributionCount, MAX(COALESCE(c.lastActiveAt,''), COALESCE((SELECT MAX(lastSeenAt) FROM visitor_sessions WHERE contributorId=c.id),'')) AS lastActiveAt FROM contributors c ORDER BY c.joinedAt DESC"),
+        d1.prepare("SELECT COUNT(*) AS n, SUM(CASE WHEN status='ACTIVE' THEN 1 ELSE 0 END) AS active, SUM(CASE WHEN status='SUSPENDED' THEN 1 ELSE 0 END) AS suspended, SUM(CASE WHEN status='BLOCKED' THEN 1 ELSE 0 END) AS blocked FROM contributors"),
+        d1.prepare("SELECT COUNT(*) AS n, SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END) AS approved, SUM(CASE WHEN status='rejected' THEN 1 ELSE 0 END) AS rejected FROM submissions WHERE userRole='CONTRIBUTOR'")
+      ]);
+      const list = neRes[0];
+      const cs = (neRes[1].results||[])[0]||{};
+      const ss = (neRes[2].results||[])[0]||{};
+      const totalC={n:cs.n||0}, activeC={n:cs.active||0}, suspendedC={n:cs.suspended||0}, blockedC={n:cs.blocked||0};
+      const subTotal={n:ss.n||0}, subPending={n:ss.pending||0}, subApproved={n:ss.approved||0}, subRejected={n:ss.rejected||0};
       return jsonResponse({success:true,
         stats:{
           totalContributors: totalC.n, active: activeC.n, suspended: suspendedC.n, blocked: blockedC.n,
@@ -2100,40 +2283,43 @@ export default {
       const id = url.searchParams.get('id');
       if(!id) return jsonResponse({success:false,error:'id required'},400);
       await expireContributorStatuses(d1);
-      const contributor = await d1.prepare("SELECT * FROM contributors WHERE id=?").bind(id).first();
-      if(!contributor) return jsonResponse({success:false,error:'Not found'},404);
-      const submissions = await d1.prepare("SELECT id,type,status,timestamp,summary FROM submissions WHERE userId=? ORDER BY timestamp DESC").bind(id).all();
-      const suggestions = await d1.prepare("SELECT id,category,content,status,timestamp FROM suggestions WHERE contributorId=? ORDER BY timestamp DESC").bind(id).all();
+      // One D1 round trip; no artificial limits -- every record is returned.
+      const neQ = [
+        d1.prepare("SELECT c.*, (SELECT COUNT(*) FROM articles WHERE authorId=c.id)+(SELECT COUNT(*) FROM stories WHERE authorId=c.id)+(SELECT COUNT(*) FROM dictionary WHERE contributor=c.id) AS __liveCount, MAX(COALESCE(c.lastActiveAt,''), COALESCE((SELECT MAX(lastSeenAt) FROM visitor_sessions WHERE contributorId=c.id),'')) AS __liveLast FROM contributors c WHERE c.id=?").bind(id),
+        d1.prepare("SELECT id,type,status,timestamp,summary FROM submissions WHERE userId=? ORDER BY timestamp DESC").bind(id),
+        d1.prepare("SELECT id,category,content,status,timestamp FROM suggestions WHERE contributorId=? ORDER BY timestamp DESC").bind(id),
+        d1.prepare("SELECT id,title,state,updatedAt FROM articles WHERE authorId=? ORDER BY updatedAt DESC").bind(id),
+        d1.prepare("SELECT id,title,state,updatedAt FROM stories WHERE authorId=? ORDER BY updatedAt DESC").bind(id),
+        d1.prepare("SELECT id,word,meaning,dateAdded FROM dictionary WHERE contributor=? ORDER BY dateAdded DESC").bind(id),
+        d1.prepare("SELECT id,name,state,updatedAt FROM tribes WHERE authorId=? ORDER BY updatedAt DESC").bind(id),
+        d1.prepare("SELECT id,name,state,updatedAt FROM people WHERE authorId=? ORDER BY updatedAt DESC").bind(id),
+        d1.prepare("SELECT id,name,state,updatedAt FROM places WHERE authorId=? ORDER BY updatedAt DESC").bind(id),
+        d1.prepare("SELECT id,title,category,updatedAt FROM media WHERE authorId=? ORDER BY updatedAt DESC").bind(id),
+        d1.prepare("SELECT SUM(CASE WHEN summary='SUSPENDED' THEN 1 ELSE 0 END) AS suspended, SUM(CASE WHEN summary='BLOCKED' THEN 1 ELSE 0 END) AS blocked FROM contributor_audit_logs WHERE action='contributor_status_changed' AND affectedRecord=?").bind(id)
+      ];
+      const neR = await d1.batch(neQ);
+      const neRows = (i)=>(neR[i]&&neR[i].results)||[];
+      const neC0 = neRows(0)[0];
+      if(!neC0) return jsonResponse({success:false,error:'Not found'},404);
+      const contributor = {...neC0, contributionCount: neC0.__liveCount, lastActiveAt: neC0.__liveLast || neC0.lastActiveAt};
+      delete contributor.__liveCount; delete contributor.__liveLast;
+      const submissions = {results: neRows(1)};
+      const suggestions = {results: neRows(2)};
       // NE MASTER IMPLEMENTATION PASS (correction pass): real, D1-sourced
       // contribution records across every content type that carries creator
       // attribution. Nothing here is invented - a type simply comes back
       // empty if this contributor has no rows in it (e.g. tribes/people/places
       // only carry attribution for records saved after the authorId/authorName
       // columns were added, so older rows correctly show no contributor here).
-      let contributions = { articles:[], stories:[], dictionary:[], tribes:[], people:[], places:[], media:[] };
-      try{ const r=await d1.prepare("SELECT id,title,state,updatedAt FROM articles WHERE authorId=? ORDER BY updatedAt DESC LIMIT 100").bind(id).all(); contributions.articles=r.results||[]; }catch(e){}
-      try{ const r=await d1.prepare("SELECT id,title,state,updatedAt FROM stories WHERE authorId=? ORDER BY updatedAt DESC LIMIT 100").bind(id).all(); contributions.stories=r.results||[]; }catch(e){}
-      try{ const r=await d1.prepare("SELECT id,word,meaning,dateAdded FROM dictionary WHERE contributor=? ORDER BY dateAdded DESC LIMIT 100").bind(id).all(); contributions.dictionary=r.results||[]; }catch(e){}
-      try{ const r=await d1.prepare("SELECT id,name,state,updatedAt FROM tribes WHERE authorId=? ORDER BY updatedAt DESC LIMIT 100").bind(id).all(); contributions.tribes=r.results||[]; }catch(e){}
-      try{ const r=await d1.prepare("SELECT id,name,state,updatedAt FROM people WHERE authorId=? ORDER BY updatedAt DESC LIMIT 100").bind(id).all(); contributions.people=r.results||[]; }catch(e){}
-      try{ const r=await d1.prepare("SELECT id,name,state,updatedAt FROM places WHERE authorId=? ORDER BY updatedAt DESC LIMIT 100").bind(id).all(); contributions.places=r.results||[]; }catch(e){}
-      try{ const r=await d1.prepare("SELECT id,title,category,updatedAt FROM media WHERE authorId=? ORDER BY updatedAt DESC LIMIT 100").bind(id).all(); contributions.media=r.results||[]; }catch(e){}
+      let contributions = { articles:neRows(3), stories:neRows(4), dictionary:neRows(5), tribes:neRows(6), people:neRows(7), places:neRows(8), media:neRows(9) };
       const contributionTotals = Object.fromEntries(Object.entries(contributions).map(([k,v])=>[k,v.length]));
       // Status-change history for this contributor, read from the existing
       // audit log (contributor_audit_logs) - no new table/column added.
       // Counts every time an admin has ever set this contributor to
       // SUSPENDED or BLOCKED, so a past warning still shows even after
       // they've been set back to ACTIVE.
-      let statusCounts = { suspended:0, blocked:0 };
-      try{
-        const suspendedRow = await d1.prepare(
-          "SELECT COUNT(*) as n FROM contributor_audit_logs WHERE action='contributor_status_changed' AND affectedRecord=? AND summary='SUSPENDED'"
-        ).bind(id).first();
-        const blockedRow = await d1.prepare(
-          "SELECT COUNT(*) as n FROM contributor_audit_logs WHERE action='contributor_status_changed' AND affectedRecord=? AND summary='BLOCKED'"
-        ).bind(id).first();
-        statusCounts = { suspended: (suspendedRow&&suspendedRow.n)||0, blocked: (blockedRow&&blockedRow.n)||0 };
-      }catch(e){}
+      const neSc = neRows(10)[0]||{};
+      let statusCounts = { suspended: neSc.suspended||0, blocked: neSc.blocked||0 };
       return jsonResponse({success:true, contributor, submissions: submissions.results||[], suggestions: suggestions.results||[], contributions, contributionTotals, statusCounts });
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
@@ -2255,7 +2441,9 @@ export default {
         const counts = await computeCategoryContentCounts(d1);
         categories = categories.map(c=>({...c, contentCount: counts[c.name]||0}));
       }
-      return jsonResponse({success:true, categories});
+      let storiesPublished;
+      if(withCounts){ try{ const r = await d1.prepare("SELECT COUNT(*) AS n FROM stories WHERE verified=1").first(); storiesPublished = (r&&r.n)||0; }catch(e){} }
+      return jsonResponse({success:true, categories, ...(storiesPublished!==undefined?{storiesPublished}:{})});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
   if(path==='/api/admin/categories' && request.method==='GET'){
