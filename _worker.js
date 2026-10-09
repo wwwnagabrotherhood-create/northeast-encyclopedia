@@ -194,7 +194,7 @@ function getTokenFromRequest(req){
 // whenever the stored photo changes, so the browser may cache each photo
 // permanently without ever showing an outdated one.
 // ---------------------------------------------------------------------------
-const NE_IMAGE_SOURCES = { article:['articles','imageUrl'], story:['stories','imageUrl'], media:['media','fileData'], tribe:['tribes','imageUrl'], person:['people','imageUrl'], place:['places','imageUrl'] };
+const NE_IMAGE_SOURCES = { article:['articles','imageUrl'], story:['stories','imageUrl'], media:['media','fileData'], tribe:['tribes','imageUrl'], person:['people','imageUrl'], place:['places','imageUrl'], ad:['ads','imageUrl'] };
 const neColumnCache = {};
 async function neTableColumns(d1, table){
   if(neColumnCache[table]) return neColumnCache[table];
@@ -233,6 +233,89 @@ function neAttachImageRef(row, type, imgCol){
   else if(len>0) out[imgCol] = '/api/d1/image/'+type+'/'+encodeURIComponent(out.id)+'?v='+neImgVersion(len, tail);
   else out[imgCol] = '';
   return out;
+}
+// ---------------------------------------------------------------------------
+// Ads. Two separate sources share the existing placements:
+//  - Direct/local ads: rows in the D1 "ads" table (Super Admin managed).
+//  - Ad network: the "adNetwork" setting (provider + publisher/client id +
+//    one ad-unit id per placement). Nothing is hard-coded; empty = off.
+// ---------------------------------------------------------------------------
+const NE_AD_SLOTS = ['AD_TOP','AD_ARTICLE','AD_SIDEBAR','AD_MOBILE'];
+const NE_AD_NETWORK_SLOTS = ['AD_TOP','AD_ARTICLE','AD_SIDEBAR'];
+function neSanitizeAdNetwork(v){
+  const src = v && typeof v==='object' ? v : {};
+  const client = typeof src.client==='string' && /^ca-pub-[0-9]{10,20}$/.test(src.client.trim()) ? src.client.trim() : '';
+  const slots = {};
+  const inSlots = src.slots && typeof src.slots==='object' ? src.slots : {};
+  for(const k of NE_AD_NETWORK_SLOTS){
+    const x = typeof inSlots[k]==='string' ? inSlots[k].trim() : '';
+    if(/^[0-9]{5,20}$/.test(x)) slots[k] = x;
+  }
+  return { enabled: src.enabled===true && !!client, provider: 'adsense', client, slots };
+}
+// How direct ads are laid out in each in-page placement (display only, never
+// a limit on how many ads can be stored). Default = single (today's look).
+const NE_AD_LAYOUT_MODES = ['single','row','swipe','rotate'];
+function neSanitizeAdLayout(v){
+  const src = v && typeof v==='object' ? v : {};
+  const out = {};
+  for(const k of NE_AD_NETWORK_SLOTS){
+    const x = src[k] && typeof src[k]==='object' ? src[k] : {};
+    const n = Math.round(Number(x.perRow));
+    out[k] = { mode: NE_AD_LAYOUT_MODES.includes(x.mode) ? x.mode : 'single', perRow: (n>=1 && n<=8) ? n : 3 };
+  }
+  return out;
+}
+// Ad-network site verification. The publisher id Super Admin saved in Manage
+// Ads -> Ad Network is used for the ads.txt file and the
+// <meta name="google-adsense-account"> tag (nothing is hard-coded). Read from
+// D1 at most once a minute per worker instance; refreshed immediately when
+// the setting is saved.
+let neAdClientCache = { at: 0, client: '' };
+async function neAdNetworkClient(env){
+  try{
+    if(Date.now() - neAdClientCache.at < 60000) return neAdClientCache.client;
+    let client = '';
+    if(env && env.NE_ENCYCLOPEDIA_D1){
+      const row = await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT value FROM settings WHERE key='adNetwork'").first();
+      if(row && row.value){ try{ client = neSanitizeAdNetwork(JSON.parse(row.value)).client; }catch(e){ client = ''; } }
+    }
+    neAdClientCache = { at: Date.now(), client };
+    return client;
+  }catch(e){ return ''; }
+}
+async function neWithAdVerification(res, env){
+  try{
+    if(!res || res.status!==200) return res;
+    const ct = res.headers.get('content-type') || '';
+    if(ct.indexOf('text/html')===-1) return res;
+    const client = await neAdNetworkClient(env);
+    if(!client) return res;
+    const html = await res.text();
+    const tag = '<meta name="google-adsense-account" content="'+client+'">';
+    const out = html.indexOf(tag)!==-1 ? html : html.replace(/<head(\s[^>]*)?>/i, (m)=>m+'\n  '+tag);
+    const h = new Headers(res.headers);
+    h.delete('content-length'); h.delete('content-encoding'); h.delete('etag');
+    return new Response(out, { status: res.status, headers: h });
+  }catch(e){ return res; }
+}
+function neIndiaToday(){ return new Date(Date.now()+330*60000).toISOString().slice(0,10); }
+function neAdIsLive(row, today){
+  if(!row || Number(row.enabled)!==1) return false;
+  if(row.startAt && String(row.startAt) > today) return false;
+  if(row.endAt && String(row.endAt) < today) return false;
+  return true;
+}
+async function neActiveDirectAds(d1){
+  try{
+    const stmt = await neSelectWithImageRef(d1, 'ads', 'imageUrl', "WHERE enabled=1 ORDER BY sortOrder ASC, createdAt ASC");
+    const r = await stmt.all();
+    const today = neIndiaToday();
+    return (r.results||[]).filter((x)=>neAdIsLive(x, today) && NE_AD_SLOTS.includes(x.slot)).map((x)=>{
+      const y = neAttachImageRef(x, 'ad', 'imageUrl');
+      return { id:y.id, title:y.title||'', body:y.body||'', imageUrl:y.imageUrl||'', linkUrl:y.linkUrl||'', slot:y.slot };
+    });
+  }catch(e){ return []; }
 }
 function neIsImageRef(v){ return typeof v==='string' && v.indexOf('/api/d1/image/')===0; }
 // A save that sends back an image link (photo unchanged) keeps the stored
@@ -353,18 +436,134 @@ async function verifyGoogleIdToken(idToken, expectedClientId){
 // It now runs once per Worker instance; all statements are idempotent
 // (CREATE IF NOT EXISTS / ALTER ADD COLUMN), so the result is identical.
 let neD1InitPromise = null;
+// Safety limits so schema setup can never hang the site:
+// - a request waits at most NE_D1_INIT_WAIT_MS for setup, then continues
+//   (the tables already exist after the first successful setup ever);
+// - a failed setup is retried at most once per NE_D1_INIT_RETRY_MS (not on
+//   every request), so one slow/failing statement cannot load every request;
+// - a setup still unfinished after NE_D1_INIT_STALE_MS is abandoned so a
+//   new attempt can start (a promise tied to a cancelled request may never
+//   settle in Workers).
+const NE_D1_INIT_WAIT_MS = 8000;
+const NE_D1_INIT_RETRY_MS = 60000;
+const NE_D1_INIT_STALE_MS = 60000;
+let neD1InitStartedAt = 0;
+let neD1InitFailedAt = 0;
+let neD1InitLast = null;
 async function initD1Tables(d1){
+  const now = Date.now();
+  if(neD1InitPromise && neD1InitStartedAt && now-neD1InitStartedAt > NE_D1_INIT_STALE_MS) neD1InitPromise = null;
   if(!neD1InitPromise){
-    neD1InitPromise = initD1TablesRun(d1).then((res)=>{
-      if(!res || res.ok===false) neD1InitPromise = null; // retry next request if setup itself failed
+    if(neD1InitFailedAt && now-neD1InitFailedAt < NE_D1_INIT_RETRY_MS && neD1InitLast) return neD1InitLast;
+    neD1InitStartedAt = now;
+    const neMine = initD1TablesRun(d1).then((res)=>{
+      neD1InitLast = res;
+      if(!res || res.ok===false){ if(neD1InitPromise===neMine) neD1InitPromise = null; neD1InitFailedAt = Date.now(); }
+      else neD1InitFailedAt = 0;
       return res;
-    }).catch((e)=>{ neD1InitPromise = null; return {ok:false, errors:[{stmt:'(outer)', error: e && e.message}]}; });
+    }).catch((e)=>{
+      if(neD1InitPromise===neMine) neD1InitPromise = null;
+      neD1InitFailedAt = Date.now();
+      neD1InitLast = {ok:false, errors:[{stmt:'(outer)', error: e && e.message}]};
+      return neD1InitLast;
+    });
+    neD1InitPromise = neMine;
   }
-  return neD1InitPromise;
+  let neTimer;
+  const neWait = new Promise((r)=>{ neTimer = setTimeout(()=>r({ok:false, pending:true, errors:[{stmt:'(wait)', error:'schema setup still running; request continued without waiting'}]}), NE_D1_INIT_WAIT_MS); });
+  try{ return await Promise.race([neD1InitPromise, neWait]); }
+  finally{ clearTimeout(neTimer); }
+}
+// Comment/string-aware SQL statement splitter used ONLY by initD1TablesRun.
+// The old `.split(';')` cut the schema at every semicolon, including ones
+// inside `--` comments (e.g. "...identified internally;"), which broke the
+// statement that followed the comment. This scanner only treats a semicolon as
+// a statement terminator when it is real SQL code: semicolons inside `--` line
+// comments, `/* */` block comments, '...' / "..." / `...` / [...] quoted text
+// and CREATE TRIGGER ... BEGIN ... END bodies are never split. Comments are
+// dropped from the emitted statements, and empty statements are never emitted
+// (so D1 is never sent a comment-only chunk, which it rejects with
+// "No SQL statements detected").
+function neSplitSqlStatements(sql){
+  const out = [];
+  let cur = '';
+  let i = 0;
+  const n = sql.length;
+  let words = [];        // leading words of the current statement
+  let inTrigger = false; // statement is CREATE [TEMP] TRIGGER
+  let inBody = false;    // seen BEGIN of a trigger body
+  let bodyDone = false;  // seen the closing END of a trigger body
+  let caseDepth = 0;     // CASE ... END nesting inside a trigger body
+  const isWordCh = (c)=>/[A-Za-z0-9_$]/.test(c);
+  const flush = ()=>{
+    const s = cur.trim();
+    if(s) out.push(s);
+    cur = ''; words = []; inTrigger = false; inBody = false; bodyDone = false; caseDepth = 0;
+  };
+  const onWord = (w)=>{
+    const lw = w.toLowerCase();
+    if(words.length < 4) words.push(lw);
+    if(!inTrigger && words[0]==='create' && words.slice(1,3).indexOf('trigger')!==-1) inTrigger = true;
+    if(inTrigger){
+      if(!inBody){ if(lw==='begin') inBody = true; }
+      else if(!bodyDone){
+        if(lw==='case') caseDepth++;
+        else if(lw==='end'){ if(caseDepth>0) caseDepth--; else bodyDone = true; }
+      }
+    }
+  };
+  while(i < n){
+    const c = sql[i], d = sql[i+1];
+    if(c==='-' && d==='-'){ // line comment: skip to end of line (keep the newline)
+      i += 2;
+      while(i < n && sql[i] !== '\n') i++;
+      cur += ' ';
+      continue;
+    }
+    if(c==='/' && d==='*'){ // block comment
+      i += 2;
+      while(i < n && !(sql[i]==='*' && sql[i+1]==='/')) i++;
+      i = Math.min(n, i + 2);
+      cur += ' ';
+      continue;
+    }
+    if(c==="'" || c==='"' || c==='`' || c==='['){
+      const close = c==='[' ? ']' : c;
+      cur += c; i++;
+      while(i < n){
+        if(sql[i] === close){
+          if(close !== ']' && sql[i+1] === close){ cur += close + close; i += 2; continue; } // doubled quote escape
+          cur += close; i++; break;
+        }
+        cur += sql[i]; i++;
+      }
+      continue;
+    }
+    if(isWordCh(c)){
+      let w = '';
+      while(i < n && isWordCh(sql[i])){ w += sql[i]; cur += sql[i]; i++; }
+      onWord(w);
+      continue;
+    }
+    if(c===';'){
+      if(inTrigger && !bodyDone && inBody){ cur += c; i++; continue; } // ';' inside trigger body
+      flush(); i++; continue;
+    }
+    cur += c; i++;
+  }
+  flush();
+  return out;
+}
+// Only these are harmless on a re-run of the idempotent schema: re-adding a
+// column that already exists, or re-creating an object that already exists.
+// Anything else (syntax error, "no such table", ...) is a REAL init failure.
+function neD1InitErrorIsHarmless(stmt, msg){
+  return (/^\s*alter\s/i.test(stmt) && /duplicate column name/i.test(msg)) ||
+         (/^\s*create\s/i.test(stmt) && /already exists/i.test(msg));
 }
 async function initD1TablesRun(d1){
   try{
-    const statements = `-- Northeast Encyclopedia D1 Schema
+    const statements = neSplitSqlStatements(`-- Northeast Encyclopedia D1 Schema
 -- Database name: northeast-encyclopedia-d1
 -- Binding: NE_ENCYCLOPEDIA_D1
 
@@ -574,8 +773,8 @@ ALTER TABLE submissions ADD COLUMN reviewReason TEXT;
 
 -- NE MASTER IMPLEMENTATION PASS (additive, backward-compatible):
 -- Safe ALTER TABLE ADD COLUMN migrations. Each runs as its own statement and
--- initD1Tables already swallows per-statement errors (e.g. "duplicate column
--- name") into initErrors without throwing, so re-running this on a database
+-- initD1Tables records a harmless "duplicate column name" per-statement error
+-- in initErrors without failing init, so re-running this on a database
 -- that already has these columns is a harmless no-op. No existing column is
 -- ever dropped or renamed, and no existing row is touched.
 ALTER TABLE categories ADD COLUMN description TEXT;
@@ -675,18 +874,49 @@ CREATE TABLE IF NOT EXISTS visitor_sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_visitor_sessions_lastSeen ON visitor_sessions(lastSeenAt);
 CREATE INDEX IF NOT EXISTS idx_visitor_sessions_contributor ON visitor_sessions(contributorId);
-CREATE INDEX IF NOT EXISTS idx_articles_authorId ON articles(authorId);
 CREATE INDEX IF NOT EXISTS idx_stories_authorId ON stories(authorId);
 CREATE INDEX IF NOT EXISTS idx_dictionary_contributor ON dictionary(contributor);
 CREATE INDEX IF NOT EXISTS idx_suggestions_contributor ON suggestions(contributorId);
-`.split(';');
+-- Direct/local advertisements managed by Super Admin (additive). Shown in the
+-- existing ad placements (slot = AD_TOP / AD_ARTICLE / AD_SIDEBAR / AD_MOBILE)
+-- only while enabled=1, the master Ads switch is ON and today is inside the
+-- optional startAt/endAt dates (YYYY-MM-DD, India time).
+CREATE TABLE IF NOT EXISTS ads (
+  id TEXT PRIMARY KEY,
+  title TEXT,
+  body TEXT,
+  imageUrl TEXT,
+  linkUrl TEXT,
+  slot TEXT NOT NULL DEFAULT 'AD_TOP',
+  enabled INTEGER NOT NULL DEFAULT 0,
+  startAt TEXT,
+  endAt TEXT,
+  sortOrder INTEGER DEFAULT 0,
+  createdAt TEXT,
+  updatedAt TEXT,
+  updatedBy TEXT
+);
+`);
     const initErrors = [];
+    let fatalCount = 0;
+    if(!statements.length){
+      return { ok: false, errors: [{stmt:'(schema)', error:'No SQL statements parsed from schema', harmless:false}], fatalCount: 1, statements: 0 };
+    }
     for(let stmt of statements){
       stmt = stmt.trim();
       if(!stmt) continue;
-      try{ await d1.prepare(stmt).run(); }catch(e){ initErrors.push({stmt: stmt.split('\n')[0].slice(0,80), error: e.message}); }
+      try{ await d1.prepare(stmt).run(); }
+      catch(e){
+        const msg = (e && e.message) || String(e);
+        const harmless = neD1InitErrorIsHarmless(stmt, msg);
+        if(!harmless) fatalCount++;
+        initErrors.push({stmt: stmt.split('\n')[0].slice(0,80), error: msg, harmless});
+      }
     }
-    return { ok: true, errors: initErrors };
+    // ok is true ONLY if no non-harmless statement failed. Errors (including
+    // harmless ones) stay in `errors` for diagnostics.
+    if(fatalCount > 0) console.log('[NE-D1-INIT] schema init incomplete: ' + fatalCount + ' failed statement(s); first failures:', JSON.stringify(initErrors.filter((x)=>!x.harmless).slice(0,5)));
+    return { ok: fatalCount === 0, errors: initErrors, fatalCount, statements: statements.length };
   }catch(e){ return { ok: false, errors: [{stmt:'(outer)', error: e.message}] }; }
 }
 
@@ -743,7 +973,17 @@ async function d1GetAllData(env, opts){
 // source stay in the database forever; only what this HTTP response
 // contains is filtered. Tribes/People/Places/Submissions/Revisions/
 // Donations are never passed through this function and are untouched.
-function neProjectContentRow(row, kind, isSuperAdmin, viewerContributorId){
+// Super Admin only: contributor id -> real display name, used when an older
+// record has the public placeholder stored as its author name.
+async function neContributorNameMap(d1){
+  try{
+    const r = await d1.prepare("SELECT id, displayName FROM contributors").all();
+    const m = {};
+    (r.results||[]).forEach((x)=>{ if(x && x.id && x.displayName) m[x.id] = x.displayName; });
+    return m;
+  }catch(e){ return {}; }
+}
+function neProjectContentRow(row, kind, isSuperAdmin, viewerContributorId, realNameMap){
   if(!row) return row;
   let anon=false, ownerId='', nameField='', idField='';
   if(kind==='article'){
@@ -766,7 +1006,11 @@ function neProjectContentRow(row, kind, isSuperAdmin, viewerContributorId){
     // display field is still kept as the public-safe value so any
     // unconditional "Anonymous Contributor" ternary elsewhere in the
     // frontend keeps rendering correctly even for a Super Admin viewer.
-    return {...row, [nameField]:'Anonymous Contributor', realAuthorId: ownerId, realAuthorName: row[nameField]||''};
+    let neReal = row[nameField]||'';
+    // An older record may have the public placeholder saved as its author
+    // name; recover the real name from the contributor's own account.
+    if((!neReal || neReal==='Anonymous Contributor') && realNameMap && ownerId && realNameMap[ownerId]) neReal = realNameMap[ownerId];
+    return {...row, [nameField]:'Anonymous Contributor', realAuthorId: ownerId, realAuthorName: neReal};
   }
   if(isOwner){
     // The Contributor who wrote it keeps their own id (ownership checks /
@@ -863,7 +1107,8 @@ export default {
       const src = NE_IMAGE_SOURCES[parts[4]];
       const id = decodeURIComponent(parts.slice(5).join('/')||'');
       if(!src || !id) return jsonResponse({success:false,error:'Not found'},404);
-      const row = await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT "+src[1]+" AS v FROM "+src[0]+" WHERE id=?").bind(id).first();
+      const neVerifiedOnly = (src[0]==='articles'||src[0]==='stories'||src[0]==='media') ? " AND COALESCE(verified,1)=1" : (src[0]==='ads' ? " AND enabled=1" : "");
+      const row = await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT "+src[1]+" AS v FROM "+src[0]+" WHERE id=?"+neVerifiedOnly).bind(id).first();
       const v = row && row.v;
       if(!v || typeof v!=='string') return jsonResponse({success:false,error:'Not found'},404);
       if(v.indexOf('data:')!==0){
@@ -912,11 +1157,12 @@ export default {
       const staffAuthInvalid = !!(token && !payload && peekUnverifiedTokenRole(token)==='SUPER_ADMIN');
       const actor = await neResolveActor(request, env);
       const viewerContributorId = (actor && actor.actorType==='contributor') ? actor.actorId : '';
+      const neNames = isSuperAdmin ? await neContributorNameMap(env.NE_ENCYCLOPEDIA_D1) : null;
       const projected = {
         ...data,
-        articles: (data.articles||[]).map((r)=>neProjectContentRow(r,'article',isSuperAdmin,viewerContributorId)),
-        stories: (data.stories||[]).map((r)=>neProjectContentRow(r,'story',isSuperAdmin,viewerContributorId)),
-        dict: (data.dict||[]).map((r)=>neProjectContentRow(r,'dictionary',isSuperAdmin,viewerContributorId))
+        articles: (data.articles||[]).map((r)=>neProjectContentRow(r,'article',isSuperAdmin,viewerContributorId,neNames)),
+        stories: (data.stories||[]).map((r)=>neProjectContentRow(r,'story',isSuperAdmin,viewerContributorId,neNames)),
+        dict: (data.dict||[]).map((r)=>neProjectContentRow(r,'dictionary',isSuperAdmin,viewerContributorId,neNames))
       };
       return jsonResponse({success:true,data:projected,staffAuthInvalid});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
@@ -935,7 +1181,8 @@ export default {
       const staffAuthInvalid = !!(token && !payload && peekUnverifiedTokenRole(token)==='SUPER_ADMIN');
       const actor = await neResolveActor(request, env);
       const viewerContributorId = (actor && actor.actorType==='contributor') ? actor.actorId : '';
-      const articles = (result.results||[]).map((r)=>neProjectContentRow(r,'article',isSuperAdmin,viewerContributorId));
+      const neNames = isSuperAdmin ? await neContributorNameMap(env.NE_ENCYCLOPEDIA_D1) : null;
+      const articles = (result.results||[]).map((r)=>neProjectContentRow(r,'article',isSuperAdmin,viewerContributorId,neNames));
       return jsonResponse({success:true,articles,staffAuthInvalid});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
@@ -1491,7 +1738,7 @@ export default {
         }catch(e){}
         await logContributorAudit(env.NE_ENCYCLOPEDIA_D1, payload.username||'SUPER_ADMIN', 'SUPER_ADMIN', 'submission_approved', subId, subResult.type);
       }
-      return jsonResponse({success:true,message:'Approved and published to D1'});
+      return jsonResponse({success:true,message:'Approved and published to D1',id:newArticleId});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
   if(path==='/api/d1/reject' && request.method==='POST'){
@@ -1532,6 +1779,10 @@ export default {
       const dump=body.dump;
       if(!dump) return jsonResponse({success:false,error:'dump required'},400);
       let count=0;
+      // A photo LINK in a dump (a browser-state export holds /api/d1/image/...
+      // links, not photo bytes) keeps the photo already stored in D1 instead
+      // of overwriting it with the link text. Real photo data is unchanged.
+      const neMigImage = async (table, id, v)=>{ if(!neIsImageRef(v)) return v||''; try{ const r=await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT imageUrl FROM "+table+" WHERE id=?").bind(id).first(); return (r&&r.imageUrl)||''; }catch(e){ return ''; } };
       // Identity-preservation fix (Round 20h, same invariant as Round 20f's
       // save-article): for an EXISTING Article row, D1 stays authoritative
       // for authorId/authorName/infobox.isAnonymous -- a migration dump may
@@ -1552,8 +1803,8 @@ export default {
           migAuthorName = a.authorName||'';
           migInfobox = a.infobox||{};
         }
-        await env.NE_ENCYCLOPEDIA_D1.prepare("INSERT OR REPLACE INTO articles (id,title,slug,state,intro,content,categories,tags,references_list,imageUrl,imageCaption,imageCredit,infobox,authorId,authorName,createdAt,updatedAt,verified,views,relatedIds) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(a.id,a.title,a.slug||'',a.state||'',a.intro||'',a.content||'',JSON.stringify(a.categories||[]),JSON.stringify(a.tags||[]),JSON.stringify(a.references||[]),a.imageUrl||'',a.imageCaption||'',a.imageCredit||'',JSON.stringify(migInfobox),migAuthorId,migAuthorName,a.createdAt||new Date().toISOString(),a.updatedAt||new Date().toISOString(),1,a.views||0,JSON.stringify(a.relatedIds||[])).run(); count++; }catch{} }
-      if(dump.tribes) for(let t of dump.tribes){ try{ await env.NE_ENCYCLOPEDIA_D1.prepare("INSERT OR REPLACE INTO tribes (id,name,altNames,state,district,language,history,culture,festivals,food,clothing,arts,population,references_list,imageUrl) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(t.id,t.name,JSON.stringify(t.altNames||[]),t.state||'',t.district||'',t.language||'',t.history||'',t.culture||'',t.festivals||'',t.food||'',t.clothing||'',t.arts||'',t.population||'',JSON.stringify(t.references||[]),t.imageUrl||'').run(); count++; }catch{} }
+        await env.NE_ENCYCLOPEDIA_D1.prepare("INSERT OR REPLACE INTO articles (id,title,slug,state,intro,content,categories,tags,references_list,imageUrl,imageCaption,imageCredit,infobox,authorId,authorName,createdAt,updatedAt,verified,views,relatedIds) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(a.id,a.title,a.slug||'',a.state||'',a.intro||'',a.content||'',JSON.stringify(a.categories||[]),JSON.stringify(a.tags||[]),JSON.stringify(a.references||[]),await neMigImage('articles',a.id,a.imageUrl),a.imageCaption||'',a.imageCredit||'',JSON.stringify(migInfobox),migAuthorId,migAuthorName,a.createdAt||new Date().toISOString(),a.updatedAt||new Date().toISOString(),1,a.views||0,JSON.stringify(a.relatedIds||[])).run(); count++; }catch{} }
+      if(dump.tribes) for(let t of dump.tribes){ try{ await env.NE_ENCYCLOPEDIA_D1.prepare("INSERT OR REPLACE INTO tribes (id,name,altNames,state,district,language,history,culture,festivals,food,clothing,arts,population,references_list,imageUrl) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(t.id,t.name,JSON.stringify(t.altNames||[]),t.state||'',t.district||'',t.language||'',t.history||'',t.culture||'',t.festivals||'',t.food||'',t.clothing||'',t.arts||'',t.population||'',JSON.stringify(t.references||[]),await neMigImage('tribes',t.id,t.imageUrl)).run(); count++; }catch{} }
       // Identity-preservation fix (Round 20h, same invariant as Round 20f's
       // save-dictionary): for an EXISTING Dictionary row, D1 stays
       // authoritative for contributor/source/isAnonymous -- never trust a
@@ -1574,8 +1825,8 @@ export default {
           migIsAnonymous = d.isAnonymous?1:0;
         }
         await env.NE_ENCYCLOPEDIA_D1.prepare("INSERT OR REPLACE INTO dictionary (id,word,language,tribe,state,meaning,example,pronunciation,altSpelling,contributor,source,dateAdded,isAnonymous) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(d.id,d.word,d.language||'',d.tribe||'',d.state||'',d.meaning||'',d.example||'',d.pronunciation||'',d.altSpelling||'',migContributor,migSource,d.dateAdded||new Date().toISOString(),migIsAnonymous).run(); count++; }catch{} }
-      if(dump.people) for(let p of dump.people){ try{ await env.NE_ENCYCLOPEDIA_D1.prepare("INSERT OR REPLACE INTO people (id,name,role,state,bio,achievements,imageUrl) VALUES (?,?,?,?,?,?,?)").bind(p.id,p.name,p.role||'',p.state||'',p.bio||'',p.achievements||'',p.imageUrl||'').run(); count++; }catch{} }
-      if(dump.places) for(let pl of dump.places){ try{ await env.NE_ENCYCLOPEDIA_D1.prepare("INSERT OR REPLACE INTO places (id,name,type,state,district,description,significance,imageUrl) VALUES (?,?,?,?,?,?,?,?)").bind(pl.id,pl.name,pl.type||'',pl.state||'',pl.district||'',pl.description||'',pl.significance||'',pl.imageUrl||'').run(); count++; }catch{} }
+      if(dump.people) for(let p of dump.people){ try{ await env.NE_ENCYCLOPEDIA_D1.prepare("INSERT OR REPLACE INTO people (id,name,role,state,bio,achievements,imageUrl) VALUES (?,?,?,?,?,?,?)").bind(p.id,p.name,p.role||'',p.state||'',p.bio||'',p.achievements||'',await neMigImage('people',p.id,p.imageUrl)).run(); count++; }catch{} }
+      if(dump.places) for(let pl of dump.places){ try{ await env.NE_ENCYCLOPEDIA_D1.prepare("INSERT OR REPLACE INTO places (id,name,type,state,district,description,significance,imageUrl) VALUES (?,?,?,?,?,?,?,?)").bind(pl.id,pl.name,pl.type||'',pl.state||'',pl.district||'',pl.description||'',pl.significance||'',await neMigImage('places',pl.id,pl.imageUrl)).run(); count++; }catch{} }
       return jsonResponse({success:true,message:`Migrated ${count} items to D1. localStorage NOT deleted - remains as backup.`});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
@@ -1635,10 +1886,11 @@ export default {
       if(username==='benjamin') return jsonResponse({success:false,error:'Use /api/reset-benjamin for SUPER_ADMIN'},403);
       const key='user_'+username;
       const existing=await env.NE_USERS_KV.get(key);
-      if(existing) return jsonResponse({success:false,error:'User already exists. Use set-password'},409);
+      let neTomb=null; if(existing){ try{ const ex=JSON.parse(existing); if(ex&&ex.deleted) neTomb=ex; }catch(e){} }
+      if(existing && !neTomb) return jsonResponse({success:false,error:'User already exists. Use set-password'},409);
       const salt=getSalt(env);
       const hashed=await pbkdf2Hash(password, salt);
-      const newUser={username:username,displayName:displayName||username,role:role,passwordHash:hashed,hash:hashed,saltVersion:'pbkdf2-100k-sha256',tokenVersion:0,createdAt:Date.now(),updatedAt:Date.now(),createdBy:payload.username};
+      const newUser={username:username,displayName:displayName||username,role:role,passwordHash:hashed,hash:hashed,saltVersion:'pbkdf2-100k-sha256',tokenVersion:neTomb?((typeof neTomb.tokenVersion==='number'?neTomb.tokenVersion:0)+1):0,createdAt:Date.now(),updatedAt:Date.now(),createdBy:payload.username};
       await env.NE_USERS_KV.put(key, JSON.stringify(newUser));
       return jsonResponse({success:true,message:'User created',username:username,role:role,displayName:displayName});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
@@ -1660,6 +1912,7 @@ export default {
       let userStr=await env.NE_USERS_KV.get(key);
       if(!userStr) return jsonResponse({success:false,error:'User not found. Create first'},404);
       let user=JSON.parse(userStr);
+      if(user && user.deleted) return jsonResponse({success:false,error:'User not found. Create first'},404);
       const salt=getSalt(env);
       const hashed=await pbkdf2Hash(newPassword, salt);
       user.passwordHash=hashed;
@@ -1685,7 +1938,14 @@ export default {
       if(!s) return jsonResponse({success:false,error:'User not found'},404);
       let u={}; try{ u=JSON.parse(s); }catch(e){}
       if(u.role==='SUPER_ADMIN') return jsonResponse({success:false,error:'Super Admin accounts cannot be deleted here'},403);
-      await env.NE_USERS_KV.delete('user_'+username);
+      if(u.deleted) return jsonResponse({success:false,error:'User not found'},404);
+      // Deleted accounts are kept as a password-less tombstone with a higher
+      // tokenVersion instead of being removed: verifyJWT() already rejects any
+      // token whose tokenVersion no longer matches the stored record, so every
+      // token this user still holds stops working immediately, and /api/login
+      // fails because there is no password hash. (Removing the record outright
+      // would leave existing tokens valid until they expire.)
+      await env.NE_USERS_KV.put('user_'+username, JSON.stringify({username, displayName:u.displayName||username, role:'DELETED', deleted:true, tokenVersion:(typeof u.tokenVersion==='number'?u.tokenVersion:0)+1, deletedAt:Date.now(), deletedBy:payload.username||''}));
       return jsonResponse({success:true,message:'User deleted',username});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
@@ -1707,7 +1967,7 @@ export default {
       let out=[];
       for(let u of usernames){
         let s=await env.NE_USERS_KV.get('user_'+u);
-        if(s){ try{ let j=JSON.parse(s); out.push({username:j.username,displayName:j.displayName,role:j.role,createdAt:j.createdAt,tokenVersion:j.tokenVersion}); }catch{} }
+        if(s){ try{ let j=JSON.parse(s); if(j&&j.deleted) continue; out.push({username:j.username,displayName:j.displayName,role:j.role,createdAt:j.createdAt,tokenVersion:j.tokenVersion}); }catch{} }
       }
       return jsonResponse({success:true,users:out});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
@@ -2254,7 +2514,7 @@ export default {
       // content and activity records on every request (previously stored
       // counters that direct publishing never updated). One D1 round trip.
       const neRes = await d1.batch([
-        d1.prepare("SELECT c.id,c.displayName,c.country,c.stateRegion,c.joinedAt,c.status,c.statusSince,c.statusExpiresAt,c.statusPermanent, (SELECT COUNT(*) FROM articles WHERE authorId=c.id)+(SELECT COUNT(*) FROM stories WHERE authorId=c.id)+(SELECT COUNT(*) FROM dictionary WHERE contributor=c.id) AS contributionCount, MAX(COALESCE(c.lastActiveAt,''), COALESCE((SELECT MAX(lastSeenAt) FROM visitor_sessions WHERE contributorId=c.id),'')) AS lastActiveAt FROM contributors c ORDER BY c.joinedAt DESC"),
+        d1.prepare("SELECT c.id,c.displayName,c.country,c.stateRegion,c.joinedAt,c.status,c.statusSince,c.statusExpiresAt,c.statusPermanent, COALESCE(na.n,0)+COALESCE(ns.n,0)+COALESCE(nd.n,0) AS contributionCount, MAX(COALESCE(c.lastActiveAt,''), COALESCE((SELECT MAX(lastSeenAt) FROM visitor_sessions WHERE contributorId=c.id),'')) AS lastActiveAt FROM contributors c LEFT JOIN (SELECT authorId AS k, COUNT(*) AS n FROM articles GROUP BY authorId) na ON na.k=c.id LEFT JOIN (SELECT authorId AS k, COUNT(*) AS n FROM stories GROUP BY authorId) ns ON ns.k=c.id LEFT JOIN (SELECT contributor AS k, COUNT(*) AS n FROM dictionary GROUP BY contributor) nd ON nd.k=c.id ORDER BY c.joinedAt DESC"),
         d1.prepare("SELECT COUNT(*) AS n, SUM(CASE WHEN status='ACTIVE' THEN 1 ELSE 0 END) AS active, SUM(CASE WHEN status='SUSPENDED' THEN 1 ELSE 0 END) AS suspended, SUM(CASE WHEN status='BLOCKED' THEN 1 ELSE 0 END) AS blocked FROM contributors"),
         d1.prepare("SELECT COUNT(*) AS n, SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END) AS approved, SUM(CASE WHEN status='rejected' THEN 1 ELSE 0 END) AS rejected FROM submissions WHERE userRole='CONTRIBUTOR'")
       ]);
@@ -2650,7 +2910,7 @@ export default {
   // Public GET returns only the small set of settings the public site needs
   // (siteTitle, adsEnabled) so this never leaks admin-only data. Full admin
   // GET/SAVE requires SUPER_ADMIN, matching every other admin route here.
-  const NE_PUBLIC_SETTING_KEYS = ['siteTitle','adsEnabled','publicHomeDesign'];
+  const NE_PUBLIC_SETTING_KEYS = ['siteTitle','adsEnabled','publicHomeDesign','adNetwork','adLayout'];
   if(path==='/api/d1/settings' && request.method==='GET'){
     try{
       if(!env.NE_ENCYCLOPEDIA_D1) return jsonResponse({success:false,error:'D1 not configured'},503);
@@ -2663,7 +2923,58 @@ export default {
           try{ out[row.key] = JSON.parse(row.value); }catch{ out[row.key] = row.value; }
         }
       }
+      // Ads: the D1 value always decides (OFF when never saved), never a browser copy.
+      out.adsEnabled = out.adsEnabled===true;
+      out.adNetwork = neSanitizeAdNetwork(out.adNetwork);
+      out.adLayout = neSanitizeAdLayout(out.adLayout);
+      out.directAds = out.adsEnabled ? await neActiveDirectAds(d1) : [];
       return jsonResponse({success:true, settings: out});
+    }catch(e){ return jsonResponse({success:false,error:e.message},500); }
+  }
+  if((path==='/api/admin/ads' && request.method==='GET') || (path==='/api/admin/ads/save' && request.method==='POST') || (path==='/api/admin/ads/delete' && request.method==='POST')){
+    try{
+      const token = getTokenFromRequest(request);
+      const payload = token ? await verifyJWT(token, getJwtSecret(env), env) : null;
+      if(!payload || payload.role !== 'SUPER_ADMIN') return jsonResponse({success:false,error:'SUPER_ADMIN only'},403);
+      if(!env.NE_ENCYCLOPEDIA_D1) return jsonResponse({success:false,error:'D1 not configured'},500);
+      const d1 = env.NE_ENCYCLOPEDIA_D1;
+      await initD1Tables(d1);
+      if(path==='/api/admin/ads'){
+        const r = await d1.prepare("SELECT * FROM ads ORDER BY sortOrder ASC, createdAt ASC").all();
+        const today = neIndiaToday();
+        return jsonResponse({success:true, today, ads:(r.results||[]).map((x)=>({...x, enabled:Number(x.enabled)===1, live:neAdIsLive(x, today)}))});
+      }
+      const body = await request.json().catch(()=>({}));
+      if(path==='/api/admin/ads/delete'){
+        const id = typeof body.id==='string' ? body.id : '';
+        if(!id) return jsonResponse({success:false,error:'id required'},400);
+        await d1.prepare("DELETE FROM ads WHERE id=?").bind(id).run();
+        return jsonResponse({success:true});
+      }
+      const ad = body.ad && typeof body.ad==='object' ? body.ad : null;
+      if(!ad) return jsonResponse({success:false,error:'ad object required'},400);
+      const str = (v, max)=> typeof v==='string' ? v.trim().slice(0, max) : '';
+      const id = (typeof ad.id==='string' && /^[A-Za-z0-9_-]{1,64}$/.test(ad.id)) ? ad.id : ('ad'+Date.now().toString(36)+Math.random().toString(36).slice(2,7));
+      const title = str(ad.title, 120), adBody = str(ad.body, 500);
+      const linkUrl = str(ad.linkUrl, 500);
+      if(linkUrl && !/^https?:\/\/[^\s"'<>]+$/i.test(linkUrl)) return jsonResponse({success:false,error:'Link must start with http:// or https://'},400);
+      const slot = NE_AD_SLOTS.includes(ad.slot) ? ad.slot : null;
+      if(!slot) return jsonResponse({success:false,error:'Unknown placement'},400);
+      const dateOk = (v)=> v==='' || /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(v);
+      const startAt = str(ad.startAt, 10), endAt = str(ad.endAt, 10);
+      if(!dateOk(startAt) || !dateOk(endAt)) return jsonResponse({success:false,error:'Dates must be YYYY-MM-DD'},400);
+      if(startAt && endAt && endAt < startAt) return jsonResponse({success:false,error:'End date is before start date'},400);
+      const existing = await d1.prepare("SELECT imageUrl, createdAt FROM ads WHERE id=?").bind(id).first();
+      let imageUrl = typeof ad.imageUrl==='string' ? ad.imageUrl : '';
+      if(neIsImageRef(imageUrl)) imageUrl = (existing && existing.imageUrl) || '';
+      else if(imageUrl && !/^data:image\/(jpeg|jpg|png|gif|webp);base64,[A-Za-z0-9+\/=]+$/.test(imageUrl) && !/^https:\/\/[^\s"'<>]+$/i.test(imageUrl)) return jsonResponse({success:false,error:'Picture must be an uploaded image or an https link'},400);
+      if(imageUrl.length > 3000000) return jsonResponse({success:false,error:'Picture too large'},400);
+      if(!title && !adBody && !imageUrl) return jsonResponse({success:false,error:'Add a title, text or picture'},400);
+      const sortOrder = Number.isFinite(Number(ad.sortOrder)) ? Math.max(-9999, Math.min(9999, Math.round(Number(ad.sortOrder)))) : 0;
+      const now = new Date().toISOString();
+      await d1.prepare("INSERT OR REPLACE INTO ads (id,title,body,imageUrl,linkUrl,slot,enabled,startAt,endAt,sortOrder,createdAt,updatedAt,updatedBy) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+        .bind(id, title, adBody, imageUrl, linkUrl, slot, ad.enabled===true?1:0, startAt, endAt, sortOrder, (existing && existing.createdAt) || now, now, payload.username||'SUPER_ADMIN').run();
+      return jsonResponse({success:true, id});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
   if(path==='/api/admin/settings' && request.method==='GET'){
@@ -2695,8 +3006,11 @@ export default {
       if(!updates) return jsonResponse({success:false,error:'settings object required'},400);
       const now = new Date().toISOString();
       for(const key of Object.keys(updates)){
+        if(key==='directAds') continue; // derived from the ads table, never stored as a setting
+        const neVal = key==='adNetwork' ? neSanitizeAdNetwork(updates[key]) : (key==='adLayout' ? neSanitizeAdLayout(updates[key]) : updates[key]);
+        if(key==='adNetwork') neAdClientCache = { at: Date.now(), client: neVal.client };
         await d1.prepare("INSERT OR REPLACE INTO settings (key,value,updatedAt,updatedBy) VALUES (?,?,?,?)")
-          .bind(key, JSON.stringify(updates[key]), now, payload.username||'SUPER_ADMIN').run();
+          .bind(key, JSON.stringify(neVal), now, payload.username||'SUPER_ADMIN').run();
       }
       // Stage 2 v1 safety correction: whenever studioConfig is saved, derive a
       // narrow, public-safe projection (active design only — no notes, no
@@ -2822,6 +3136,8 @@ export default {
                     if(sv.underline==='on') clean.underline = 'on';
                     if(typeof sv.letterSpacing==='number' && sv.letterSpacing>=-5 && sv.letterSpacing<=20) clean.letterSpacing = sv.letterSpacing;
                     if(typeof sv.textAlign==='string' && (sv.textAlign==='left'||sv.textAlign==='center'||sv.textAlign==='right')) clean.textAlign = sv.textAlign;
+                    // Section Position (left/centre/right) for a section narrowed by Box width.
+                    if(typeof sv.sectionPosition==='string' && (sv.sectionPosition==='left'||sv.sectionPosition==='center'||sv.sectionPosition==='right')) clean.sectionPosition = sv.sectionPosition;
                     if(typeof sv.columns==='number' && Number.isInteger(sv.columns) && sv.columns>=1 && sv.columns<=6) clean.columns = sv.columns;
                     if(Object.keys(clean).length>0) outSV[key] = clean;
                   });
@@ -2947,10 +3263,15 @@ export default {
     }
   }
 
+  if(path==='/ads.txt' && (request.method==='GET' || request.method==='HEAD')){
+    const client = await neAdNetworkClient(env);
+    if(!client) return new Response('Not found', {status:404, headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});
+    return new Response('google.com, '+client.replace(/^ca-/,'')+', DIRECT, f08c47fec0942fa0\n', {status:200, headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'public, max-age=300'}});
+  }
   // All other routes -> static assets (index.html, setup.html etc unchanged)
     try{
     if(env && env.ASSETS && env.ASSETS.fetch){
-      return await fetchAssetWithWrapperFallback(request, env);
+      return await neWithAdVerification(await fetchAssetWithWrapperFallback(request, env), env);
     }
   }catch(e){}
   try{
