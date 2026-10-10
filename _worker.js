@@ -262,7 +262,9 @@ function neSanitizeAdLayout(v){
   for(const k of NE_AD_NETWORK_SLOTS){
     const x = src[k] && typeof src[k]==='object' ? src[k] : {};
     const n = Math.round(Number(x.perRow));
-    out[k] = { mode: NE_AD_LAYOUT_MODES.includes(x.mode) ? x.mode : 'single', perRow: (n>=1 && n<=8) ? n : 3 };
+    // Box height (px) / Box width (%) of the ad box in this place; 0 = normal size.
+    const h = Math.round(Number(x.h)), w = Math.round(Number(x.w));
+    out[k] = { mode: NE_AD_LAYOUT_MODES.includes(x.mode) ? x.mode : 'single', perRow: (n>=1 && n<=8) ? n : 3, h: (h>=40 && h<=600) ? h : 0, w: (w>=20 && w<=100) ? w : 0 };
   }
   return out;
 }
