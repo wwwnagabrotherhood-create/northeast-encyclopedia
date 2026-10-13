@@ -2439,13 +2439,18 @@ export default {
       const totalUsers = (totalRow && totalRow.n) || 0;
       const totalTimeSeconds = (totalRow && totalRow.total) || 0;
       const avgTimeSeconds = totalUsers>0 ? Math.round(totalTimeSeconds/totalUsers) : 0;
+      const content = {};
+      for(const [k,t] of [["contributors","contributors"],["articles","articles"],["dictionary","dictionary"],["stories","stories"],["tribes","tribes"],["media","media"]]){
+        try{ const r0 = await d1.prepare("SELECT COUNT(*) as n FROM "+t).first(); content[k] = (r0&&r0.n)||0; }catch(e){}
+      }
       return jsonResponse({success:true, stats:{
         onlineNow: (onlineNowRow&&onlineNowRow.n)||0,
         contributorsOnline: (contributorsOnlineRow&&contributorsOnlineRow.n)||0,
         usersToday: (todayRow&&todayRow.n)||0,
         totalUsers,
         totalTimeSeconds,
-        avgTimeSeconds
+        avgTimeSeconds,
+        content
       }});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
