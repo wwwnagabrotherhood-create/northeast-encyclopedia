@@ -269,7 +269,7 @@ It is maintained by Archaeological Survey of India.`,categories:["History","Trip
   };
   reader.readAsDataURL(file);
 }
-function qi(){let[e,n]=G.useState(M1),[t,r]=G.useState(!1),[neContributor,setNeContributor]=G.useState(()=>{try{const raw=localStorage.getItem("ne_contributor");return raw?JSON.parse(raw):null}catch{return null}}),[neMedia,setNeMedia]=G.useState([]),[neMediaForm,setNeMediaForm]=G.useState({}),[neCategories,setNeCategories]=G.useState([]),[neCategoriesLoaded,setNeCategoriesLoaded]=G.useState(!1),[neCatSearch,setNeCatSearch]=G.useState(""),[neQuickCatStudioSearch,setNeQuickCatStudioSearch]=G.useState(""),[neStudioLibrarySearch,setNeStudioLibrarySearch]=G.useState(""),[neEngagementData,setNeEngagementData]=G.useState({}),[neVisitorId]=G.useState(()=>{try{let v=localStorage.getItem("ne_visitor_id");if(!v){v="v"+Date.now().toString(36)+Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10);localStorage.setItem("ne_visitor_id",v)}return v}catch{return "v"+Date.now().toString(36)}}),[neLiveStats,setNeLiveStats]=G.useState(null),[neStudioSelectedSection,setNeStudioSelectedSection]=G.useState("quickCategories"),[neContributorsList,setNeContributorsList]=G.useState([]),[neAdsAdmin,setNeAdsAdmin]=G.useState(null),[neAdForm,setNeAdForm]=G.useState(null),[neAdNetForm,setNeAdNetForm]=G.useState(null),[neAdMsg,setNeAdMsg]=G.useState(""),[neAdNote,setNeAdNote]=G.useState(null),[neAdBusy,setNeAdBusy]=G.useState(""),[neAdLayoutForm,setNeAdLayoutForm]=G.useState(null),[neContributorSearch,setNeContributorSearch]=G.useState(""),[neContributorDetail,setNeContributorDetail]=G.useState(null),[neDictSearch,setNeDictSearch]=G.useState(""),[neStorySearch,setNeStorySearch]=G.useState(""),[neGallerySearch,setNeGallerySearch]=G.useState(""),[neLiveContributorCount,setNeLiveContributorCount]=G.useState(null),[l,u]=G.useState(null),[o,f]=G.useState({type:"home"}),[d,y]=G.useState(""),[m,g]=G.useState(()=>{try{return new URLSearchParams(window.location.search).get("neadmin")==="1"}catch(e){return!1}}),[v,E]=G.useState({username:"",password:""}),[w,P]=G.useState(!1),[B,h]=G.useState("article"),[s,p]=G.useState({}),[k,z]=G.useState(""),[le2Val,le2]=G.useState(!1),[T,O]=G.useState("idle"),[R,A]=G.useState(""),[M,V]=G.useState(null),[I,le]=G.useState({}),[neFontSize,setNeFontSize]=G.useState(()=>{try{return localStorage.getItem("ne_font_size")||"Standard"}catch{return "Standard"}}),[neSuggestions,setNeSuggestions]=G.useState([]),[neSuggestUnread,setNeSuggestUnread]=G.useState(0),[neCategoriesData,setNeCategoriesData]=G.useState([]),[neCategoryForm,setNeCategoryForm]=G.useState({}),[neCategoryAdminSearch,setNeCategoryAdminSearch]=G.useState(""),[neCatContentSearch,setNeCatContentSearch]=G.useState(""),[neCategoryPageSearch,setNeCategoryPageSearch]=G.useState(""),[neStatePageSearch,setNeStatePageSearch]=G.useState(""),[neMySubmissions,setNeMySubmissions]=G.useState([]),[neColorMode,setNeColorMode]=G.useState(()=>{try{return localStorage.getItem("ne_color_mode")||"White"}catch{return "White"}}),[neSearchOpen,setNeSearchOpen]=G.useState(!1),[neShowSuggest,setNeShowSuggest]=G.useState(!1),[neSuggestText,setNeSuggestText]=G.useState(""),[neSettingsOpen,setNeSettingsOpen]=G.useState(!1),[neFontPanelOpen,setNeFontPanelOpen]=G.useState(!1),[neColourPanelOpen,setNeColourPanelOpen]=G.useState(!1),
+function qi(){let[e,n]=G.useState(M1),[t,r]=G.useState(!1),[neContributor,setNeContributor]=G.useState(()=>{try{const raw=localStorage.getItem("ne_contributor");return raw?JSON.parse(raw):null}catch{return null}}),[neMedia,setNeMedia]=G.useState([]),[neMediaForm,setNeMediaForm]=G.useState({}),[neCategories,setNeCategories]=G.useState([]),[neCategoriesLoaded,setNeCategoriesLoaded]=G.useState(!1),[neCatSearch,setNeCatSearch]=G.useState(""),[neQuickCatStudioSearch,setNeQuickCatStudioSearch]=G.useState(""),[neStudioLibrarySearch,setNeStudioLibrarySearch]=G.useState(""),[neEngagementData,setNeEngagementData]=G.useState({}),[neVisitorId]=G.useState(()=>{try{let v=localStorage.getItem("ne_visitor_id");if(!v){v="v"+Date.now().toString(36)+Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10);localStorage.setItem("ne_visitor_id",v)}return v}catch{return "v"+Date.now().toString(36)}}),[neLiveStats,setNeLiveStats]=G.useState(null),[neStudioSelectedSection,setNeStudioSelectedSection]=G.useState("quickCategories"),[neContributorsList,setNeContributorsList]=G.useState([]),[neAdsAdmin,setNeAdsAdmin]=G.useState(null),[neAdForm,setNeAdForm]=G.useState(null),[neAdNetForm,setNeAdNetForm]=G.useState(null),[neAdMsg,setNeAdMsg]=G.useState(""),[neAdNote,setNeAdNote]=G.useState(null),[neAdBusy,setNeAdBusy]=G.useState(""),[neAdLayoutForm,setNeAdLayoutForm]=G.useState(null),[neContributorSearch,setNeContributorSearch]=G.useState(""),[neContributorDetail,setNeContributorDetail]=G.useState(null),[neDictSearch,setNeDictSearch]=G.useState(""),[neStorySearch,setNeStorySearch]=G.useState(""),[neGallerySearch,setNeGallerySearch]=G.useState(""),[neLiveContributorCount,setNeLiveContributorCount]=G.useState(null),[l,u]=G.useState(null),[o,f]=G.useState({type:"home"}),[d,y]=G.useState(""),[m,g]=G.useState(()=>{try{return new URLSearchParams(window.location.search).get("neadmin")==="1"}catch(e){return!1}}),[v,E]=G.useState({username:"",password:""}),[w,P]=G.useState(!1),[B,h]=G.useState("article"),[s,p]=G.useState({}),[k,z]=G.useState(""),[le2Val,le2]=G.useState(!1),[T,O]=G.useState("idle"),[R,A]=G.useState(""),[M,V]=G.useState(null),[I,le]=G.useState({}),[neFontSize,setNeFontSize]=G.useState(()=>{try{return localStorage.getItem("ne_font_size")||"Standard"}catch{return "Standard"}}),[neSuggestions,setNeSuggestions]=G.useState([]),[neSuggestUnread,setNeSuggestUnread]=G.useState(0),[neCategoriesData,setNeCategoriesData]=G.useState([]),[neCategoryForm,setNeCategoryForm]=G.useState({}),[neCategoryAdminSearch,setNeCategoryAdminSearch]=G.useState(""),[neCatContentSearch,setNeCatContentSearch]=G.useState(""),[neCategoryPageSearch,setNeCategoryPageSearch]=G.useState(""),[neStatePageSearch,setNeStatePageSearch]=G.useState(""),[neMySubmissions,setNeMySubmissions]=G.useState([]),[neColorMode,setNeColorMode]=G.useState(()=>{try{return localStorage.getItem("ne_color_mode")||"White"}catch{return "White"}}),[neNavOrder,setNeNavOrder]=G.useState(()=>{const def=["home","search","write","dictionary"];try{const v=JSON.parse(localStorage.getItem("ne_bottom_nav_order")||"null");if(Array.isArray(v)&&v.length===def.length&&def.every((k)=>v.includes(k)))return v}catch{}return def}),[neNavArrangeOpen,setNeNavArrangeOpen]=G.useState(!1),[neNavIconSize,setNeNavIconSize]=G.useState(()=>{try{const v=localStorage.getItem("ne_bottom_icon_size");return v==="Small"||v==="Large"?v:"Medium"}catch{return "Medium"}}),[neNavIconPanelOpen,setNeNavIconPanelOpen]=G.useState(!1),[neSearchOpen,setNeSearchOpen]=G.useState(!1),[neShowSuggest,setNeShowSuggest]=G.useState(!1),[neSuggestText,setNeSuggestText]=G.useState(""),[neSettingsOpen,setNeSettingsOpen]=G.useState(!1),[neFontPanelOpen,setNeFontPanelOpen]=G.useState(!1),[neColourPanelOpen,setNeColourPanelOpen]=G.useState(!1),
 // NE STUDIO STAGE 1: SUPER_ADMIN-only Studio shell state. neStudioConfig is
 // D1-backed (read via /api/admin/settings, written via /api/admin/settings/save
 // under the single key "studioConfig") — never persisted to localStorage.
@@ -1879,8 +1879,7 @@ function neTitleFontSizeStyle(design){
 // storage/getter/setter functions as every section above, never a new
 // system.
 const NE_TITLE_OPTIONS=[
-  {key:"headerLogo",label:"Header Logo"},
-  {key:"heroTitle",label:"Hero Banner Title"},
+  {key:"headerLogo",label:"Header Title"},
   {key:"featuredHeading",label:"\"Today's Featured\" Heading"},
   {key:"exploreByTopicHeading",label:"\"Explore by Topic\" Heading"},
   {key:"allCategoriesHeading",label:"\"All Categories\" Heading"}
@@ -2621,8 +2620,7 @@ function neHomeCategoryCount(design){
   }catch(err){ return null; }
 }
 const NE_HOME_SECTION_DEFS=[
-  {key:"hero",label:"Hero / Banner",reorder:true},
-  {key:"quickActions",label:"Quick Action Buttons",reorder:true},
+  {key:"hero",label:"Header / Banner",reorder:false},
   {key:"dailyNews",label:"Daily Northeast News",reorder:true},
   {key:"quickCategories",label:"Quick Categories Grid",reorder:true},
   {key:"featured",label:"Today's Featured",reorder:true},
@@ -2750,39 +2748,123 @@ const neTitleStyle=(key)=>{
   const extraStyle=neSectionFontExtraStyle(vis);
   return {style:{...colorStyle,...sizeStyle,...extraStyle},hasColor:!!colorStyle.color};
 };
+
+// Merged header + bottom bar (Oct 2026).
+// The old green Hero/Banner is gone: its "Anyone can contribute" line now sits
+// directly under the header row on the homepage, and its Donate button moved
+// to the top of the menu drawer. The admin's existing "Header / Banner"
+// (formerly "Header / Banner") Size + Font Size + Font Colour + Donate Colour
+// controls now drive the header, and "Header Title" (formerly "Header Logo")
+// still controls the title font -- so no new server-side setting is needed.
+const neHdr=(()=>{
+  let vis=null,raw={},enabled=true;
+  try{const d=neGetPublicHomeDesign(e.settings.publicHomeDesign);vis=neSectionVisualDesign(d,"hero");raw=(d&&d.sectionVisuals&&d.sectionVisuals.hero)||{};enabled=neHomeSectionEnabled(d,"hero");}catch(err){}
+  const PAD={smaller:4,standard:12,medium:18,large:26};
+  let pad=12,minH=0;
+  if(typeof raw.boxTallPx==="number"&&raw.boxTallPx>=24&&raw.boxTallPx<=800) minH=Math.min(220,raw.boxTallPx);
+  else if(vis&&vis.categorySize==="custom"&&vis.categorySizeCustom&&typeof vis.categorySizeCustom.height==="number") minH=Math.max(24,Math.min(220,vis.categorySizeCustom.height));
+  else if(vis&&typeof vis.categorySize==="string"&&PAD[vis.categorySize]!=null) pad=PAD[vis.categorySize];
+  const TXT={small:9,standard:11,medium:13,large:15};
+  const SIZE_TO_TXT={smaller:"small",standard:"standard",medium:"medium",large:"large"};
+  let fs=11;
+  if(vis&&vis.sectionFontSize==="custom"&&vis.sectionFontSizeCustom&&typeof vis.sectionFontSizeCustom.fontSize==="number") fs=Math.max(7,Math.min(30,Math.round(vis.sectionFontSizeCustom.fontSize*0.69)));
+  else if(vis&&typeof vis.sectionFontSize==="string"&&TXT[vis.sectionFontSize]) fs=TXT[vis.sectionFontSize];
+  else if(vis&&!vis.sectionFontSize&&typeof vis.categorySize==="string"&&SIZE_TO_TXT[vis.categorySize]) fs=TXT[SIZE_TO_TXT[vis.categorySize]];
+  let fc={},fx={},dbs={};
+  try{fc=neSectionFontColorStyle(vis)||{};fx=neSectionFontExtraStyle(vis)||{};dbs=neSectionColorStyle({sectionColor:raw.donateColor,sectionColorCustom:raw.donateColorCustom})||{};}catch(err){}
+  const showSub=enabled&&o.type==="home";
+  // Background colour: header turns that colour; on a dark colour the title,
+  // menu icon and contribute text switch to white so they stay readable.
+  let bg=null,dark=false;
+  try{const bgs=neSectionColorStyle(vis)||{};if(typeof bgs.backgroundColor==="string"&&/^#[0-9a-fA-F]{6}$/.test(bgs.backgroundColor)){bg=bgs.backgroundColor;const r0=parseInt(bg.slice(1,3),16),g0=parseInt(bg.slice(3,5),16),b0=parseInt(bg.slice(5,7),16);dark=((0.299*r0+0.587*g0+0.114*b0)/255)<0.6;}}catch(err){}
+  const subColor=(!fc.color&&dark)?{color:"rgba(255,255,255,.9)"}:{};
+  return {pad,minH,showSub,hdrBg:bg,hdrDark:dark,textStyle:{fontSize:fs+"px",...fc,...subColor,...fx},textHasColor:!!fc.color||dark,
+    donateStyle:dbs.backgroundColor?{backgroundColor:dbs.backgroundColor,color:"#14532d"}:{},donateHasColor:!!dbs.backgroundColor};
+})();
+const neWriteArticle=()=>{if(!Qt&&!neContributor){neCreateAccountPrompt("Writing an Article");return}p({}),f({type:"editArticle"}),h("edit")};
+const neAddWord=()=>{if(!Qt&&!neContributor){neCreateAccountPrompt("Adding a Dictionary Word");return}p({}),f({type:"addWord"})};
+const NE_NAV_ITEMS={
+  home:{icon:"🏠",label:"Home",active:()=>o.type==="home",go:()=>{setNeSearchOpen(!1);f({type:"home"});try{window.scrollTo({top:0,behavior:"smooth"})}catch(err){}}},
+  search:{icon:"🔍",label:"Search",active:()=>neSearchOpen,go:()=>{setNeSearchOpen(!neSearchOpen);try{window.scrollTo({top:0,behavior:"smooth"})}catch(err){}}},
+  write:{icon:"➕",label:"Write Article",active:()=>o.type==="editArticle",go:()=>{setNeSearchOpen(!1);neWriteArticle()},big:!0},
+  dictionary:{icon:"📚",label:"Dictionary",active:()=>o.type==="dictionary"||o.type==="addWord",go:()=>{setNeSearchOpen(!1);f({type:"dictionary"});try{window.scrollTo({top:0})}catch(err){}}}
+};
+const NE_NAV_SIZES={Small:{icon:16,label:9,bar:50,big:40,bigFont:24,lift:14},Medium:{icon:20,label:10,bar:60,big:48,bigFont:30,lift:20},Large:{icon:27,label:11.5,bar:74,big:58,bigFont:36,lift:24}};
+const nz=NE_NAV_SIZES[neNavIconSize]||NE_NAV_SIZES.Medium;
+const neSetNavIconSize=(v)=>{setNeNavIconSize(v);try{localStorage.setItem("ne_bottom_icon_size",v)}catch(err){}};
+const neSaveNavOrder=(arr)=>{setNeNavOrder(arr);try{localStorage.setItem("ne_bottom_nav_order",JSON.stringify(arr))}catch(err){}};
+const neMoveNav=(idx,dir)=>{const j=idx+dir;if(j<0||j>=neNavOrder.length)return;const arr=neNavOrder.slice();const t0=arr[idx];arr[idx]=arr[j];arr[j]=t0;neSaveNavOrder(arr)};
+const neBottomBar=()=>{
+  const neMA=e.settings.adsEnabled?neDirectAdFor(e.settings,"AD_MOBILE"):null;
+  const adRow=e.settings.adsEnabled?i("div",{className:"md:hidden px-3 py-1.5 border-b border-gray-100",children:neMA?c(neSafeAdLink(neMA.linkUrl)?"a":"div",{"data-ne-ad":neMA.id,...(neSafeAdLink(neMA.linkUrl)?{href:neSafeAdLink(neMA.linkUrl),target:"_blank",rel:"sponsored noopener noreferrer"}:{}),className:"flex items-center gap-2 text-[12px]",children:[neMA.imageUrl?i("img",{src:neMA.imageUrl,alt:"",style:{height:"28px",width:"auto",maxWidth:"56px",objectFit:"contain"}}):null,i("span",{className:"text-[10px] font-bold text-[#ff6f00]",children:"AD"}),i("span",{className:"flex-1 truncate",children:[neMA.title,neMA.title&&neMA.body?" — ":"",neMA.body].join("")})]}):c("div",{className:"text-[10px] text-center",children:[i("span",{className:"font-bold text-[#ff6f00]",children:"AD_MOBILE"})," • Support local business • Ad space"]})}):null;
+  const btn=(key)=>{const it=NE_NAV_ITEMS[key];if(!it)return null;const on=it.active();
+    if(it.big) return c("button",{key,onClick:it.go,"aria-label":it.label,className:"flex-1 min-w-0 flex flex-col items-center",style:{justifyContent:"flex-end",gap:"3px",paddingBottom:"6px"},children:[
+      i("span",{className:"ne-dgreen-bg text-white flex items-center justify-center rounded-full",style:{width:nz.big+"px",height:nz.big+"px",marginTop:-nz.lift+"px",fontSize:nz.bigFont+"px",fontWeight:700,lineHeight:1,border:"3px solid #fff",boxShadow:"0 4px 10px rgba(0,0,0,.18)"},children:"+"}),
+      i("span",{className:"font-semibold leading-none ne-dgreen-text truncate",style:{maxWidth:"100%",fontSize:nz.label+"px"},children:it.label})]});
+    return c("button",{key,onClick:it.go,"aria-label":it.label,className:"flex-1 min-w-0 flex flex-col items-center justify-center gap-1 py-1",children:[
+      i("span",{style:{fontSize:nz.icon+"px",lineHeight:1,opacity:on?1:.8},children:it.icon}),
+      i("span",{style:{maxWidth:"100%",fontSize:nz.label+"px"},className:"leading-none truncate "+(on?"font-bold ne-dgreen-text":"font-medium text-gray-600"),children:it.label})]});
+  };
+  const arrange=neNavArrangeOpen&&c("div",{className:"mx-auto px-3 border-b border-gray-100",style:{maxWidth:"560px",paddingTop:"12px",paddingBottom:"8px"},children:[
+    c("div",{className:"flex items-center justify-between",style:{marginBottom:"8px"},children:[
+      c("div",{children:[i("div",{className:"text-[13px] font-bold ne-dgreen-text",children:"Bottom bar settings"}),i("div",{className:"text-gray-500",style:{fontSize:"10.5px"},children:"Saved on this device only."})]}),
+      i("button",{onClick:()=>setNeNavArrangeOpen(!1),className:"px-3 rounded-full ne-dgreen-bg text-white text-[11px] font-semibold",style:{height:"28px"},children:"Done"})]}),
+    c("div",{className:"flex items-center gap-2",style:{marginBottom:"8px"},children:[i("span",{className:"flex-1 font-medium",style:{fontSize:"12.5px"},children:"Icon size"}),...["Small","Medium","Large"].map((sz)=>i("button",{key:sz,onClick:()=>neSetNavIconSize(sz),style:{height:"28px"},className:"px-3 rounded-full text-[11px] font-semibold transition-colors "+(neNavIconSize===sz?"ne-dgreen-pill-active":"ne-dgreen-pill-inactive"),children:sz}))]}),
+    i("div",{className:"text-gray-500",style:{fontSize:"10.5px",marginBottom:"6px"},children:"Order (\u2699\ufe0f Settings always stays last):"}),
+    c("div",{className:"flex flex-col gap-1.5",children:neNavOrder.map((key,idx)=>c("div",{key,className:"flex items-center gap-2 h-9 px-3 rounded-xl bg-gray-50 border border-gray-100",children:[
+      i("span",{style:{fontSize:"16px"},children:NE_NAV_ITEMS[key].icon}),
+      i("span",{className:"flex-1 font-medium",style:{fontSize:"12.5px"},children:NE_NAV_ITEMS[key].label}),
+      i("button",{onClick:()=>neMoveNav(idx,-1),disabled:idx===0,"aria-label":"Move up",style:{width:"28px",height:"28px",opacity:idx===0?.3:1},className:"rounded-full border border-gray-200 bg-white text-[12px]",children:"▲"}),
+      i("button",{onClick:()=>neMoveNav(idx,1),disabled:idx===neNavOrder.length-1,"aria-label":"Move down",style:{width:"28px",height:"28px",opacity:idx===neNavOrder.length-1?.3:1},className:"rounded-full border border-gray-200 bg-white text-[12px]",children:"▼"})]}))}),
+    i("button",{onClick:()=>neSaveNavOrder(["home","search","write","dictionary"]),className:"mt-2 text-[11px] underline text-gray-500",children:"Reset to default"})]});
+  const bar=c("div",{"data-ne-bottom-bar":"1",className:"fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200",style:{zIndex:45,boxShadow:"0 -4px 20px rgba(0,0,0,0.08)",paddingBottom:"env(safe-area-inset-bottom,0px)",filter:neColorMode==="Dark"?"invert(1) hue-rotate(180deg)":"none"},children:[
+    adRow,arrange,
+    c("nav",{className:"mx-auto flex px-1",style:{height:nz.bar+"px",maxWidth:"560px",alignItems:"stretch"},children:[
+      ...neNavOrder.map(btn),
+      c("button",{key:"settings",onClick:()=>setNeNavArrangeOpen(!neNavArrangeOpen),"aria-label":"Settings",className:"flex-1 min-w-0 flex flex-col items-center justify-center gap-1 py-1",children:[
+        i("span",{style:{fontSize:nz.icon+"px",lineHeight:1,opacity:neNavArrangeOpen?1:.8},children:"⚙️"}),
+        i("span",{style:{fontSize:nz.label+"px"},className:"leading-none "+(neNavArrangeOpen?"font-bold ne-dgreen-text":"font-medium text-gray-600"),children:"Settings"})]})]})]});
+  return c(tl,{children:[
+    i("div",{"aria-hidden":"true",style:{height:"calc("+(nz.bar+12)+"px + env(safe-area-inset-bottom,0px))"}}),
+    e.settings.adsEnabled&&i("div",{"aria-hidden":"true",className:"md:hidden",style:{height:"44px"}}),
+    (typeof wd==="function"&&typeof document!=="undefined")?wd(bar,document.body):bar]});
+};
 return c("div",{className:"min-h-screen bg-[#fefefe] text-[#1a1a1a] font-[Inter,system-ui,sans-serif] selection:bg-[#ff6f00]/20",style:{zoom:neFontSize==="Large"?1.15:neFontSize==="Medium"?1.075:1,filter:neColorMode==="Dark"?"invert(1) hue-rotate(180deg)":"none",...nePageBgStyle},children:[
-i("div",{id:"ne-hidden-google-btn",style:{position:"fixed",top:"-9999px",left:"-9999px",opacity:0,pointerEvents:"none"}}),i("style",{children:"@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap'); @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Open+Sans:wght@400;700&family=Lato:wght@400;700&family=Poppins:wght@400;700&family=Montserrat:wght@400;700&family=Nunito:wght@400;700&family=Work+Sans:wght@400;700&family=Rubik:wght@400;700&family=Manrope:wght@400;700&family=Merriweather:wght@400;700&family=Playfair+Display:wght@400;700&family=Lora:wght@400;700&family=PT+Serif:wght@400;700&family=Source+Serif+4:wght@400;700&family=Oswald:wght@400;700&family=Bebas+Neue&family=Raleway:wght@400;700&family=JetBrains+Mono:wght@400;700&family=Space+Mono:wght@400;700&display=swap'); @import url('https://fonts.googleapis.com/css2?family=Great+Vibes&family=Lobster&family=Dancing+Script:wght@400;700&family=Pacifico&family=Parisienne&family=Sacramento&family=Allura&family=Cookie&family=Grand+Hotel&family=Rochester&family=Berkshire+Swash&family=Leckerli+One&family=Questrial&display=swap'); h1,h2,h3{font-family:'Fraunces',serif;} .ne-dgreen-bg{background-color:#14532d !important} .ne-dgreen-bg:hover{background-color:#1b6a3a !important} .ne-dgreen-text{color:#14532d !important} .ne-dgreen-border{border-color:#14532d !important} .ne-dgreen-border-10{border-color:rgba(20,83,45,0.10) !important} .ne-dgreen-border-15{border-color:rgba(20,83,45,0.15) !important} .ne-dgreen-40{color:rgba(20,83,45,0.40) !important} .ne-dgreen-ring:focus{--tw-ring-color:rgba(20,83,45,0.20) !important} .ne-dgreen-focus-border:focus{border-color:rgba(20,83,45,0.30) !important} .ne-dgreen-outline{border:2px solid #14532d !important;color:#14532d !important;background:#fff} .ne-dgreen-outline:hover{background-color:rgba(20,83,45,0.05) !important} .ne-dgreen-pill-active{background-color:#14532d !important;color:#fff !important;border-color:#14532d !important} .ne-dgreen-pill-inactive{border:2px solid #14532d !important;color:#14532d !important;background:#fff} .ne-dgreen-pill-inactive:hover{background-color:rgba(20,83,45,0.05) !important} .ne-gold-btn{background-color:#ffd54f !important;color:#14532d !important} .ne-gold-text{color:#ffd54f !important} .ne-profile-placeholder{background-color:#d1d5db !important} .ne-rg{display:grid;grid-template-columns:repeat(var(--ne-m,2),minmax(0,1fr))} @media (min-width:768px){.ne-rg{grid-template-columns:repeat(var(--ne-d,4),minmax(0,1fr))}} .ne-rg-auto{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--ne-w,160px)),1fr))} @container (max-width:159px){.ne-fit-intro{display:none !important}} .ne-qc17{width:calc(100% / var(--ne-m,2) - 4px)} @media (min-width:768px){.ne-qc17{width:calc(100% / var(--ne-d,4) - 6px)}} .ne-cols-1{grid-template-columns:repeat(1,minmax(0,1fr)) !important} .ne-cols-2{grid-template-columns:repeat(2,minmax(0,1fr)) !important} .ne-cols-3{grid-template-columns:repeat(3,minmax(0,1fr)) !important} .ne-cols-4{grid-template-columns:repeat(4,minmax(0,1fr)) !important} .ne-cols-5{grid-template-columns:repeat(5,minmax(0,1fr)) !important} .ne-cols-6{grid-template-columns:repeat(6,minmax(0,1fr)) !important}"}),c("header",{className:"sticky top-0 z-40 bg-white border-b ne-dgreen-border-10",children:[c("div",{className:"max-w-[1280px] mx-auto px-4 py-3 flex items-center justify-between gap-3",children:[
+i("div",{id:"ne-hidden-google-btn",style:{position:"fixed",top:"-9999px",left:"-9999px",opacity:0,pointerEvents:"none"}}),i("style",{children:"@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap'); @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Open+Sans:wght@400;700&family=Lato:wght@400;700&family=Poppins:wght@400;700&family=Montserrat:wght@400;700&family=Nunito:wght@400;700&family=Work+Sans:wght@400;700&family=Rubik:wght@400;700&family=Manrope:wght@400;700&family=Merriweather:wght@400;700&family=Playfair+Display:wght@400;700&family=Lora:wght@400;700&family=PT+Serif:wght@400;700&family=Source+Serif+4:wght@400;700&family=Oswald:wght@400;700&family=Bebas+Neue&family=Raleway:wght@400;700&family=JetBrains+Mono:wght@400;700&family=Space+Mono:wght@400;700&display=swap'); @import url('https://fonts.googleapis.com/css2?family=Great+Vibes&family=Lobster&family=Dancing+Script:wght@400;700&family=Pacifico&family=Parisienne&family=Sacramento&family=Allura&family=Cookie&family=Grand+Hotel&family=Rochester&family=Berkshire+Swash&family=Leckerli+One&family=Questrial&display=swap'); h1,h2,h3{font-family:'Fraunces',serif;} .ne-dgreen-bg{background-color:#14532d !important} .ne-dgreen-bg:hover{background-color:#1b6a3a !important} .ne-dgreen-text{color:#14532d !important} .ne-dgreen-border{border-color:#14532d !important} .ne-dgreen-border-10{border-color:rgba(20,83,45,0.10) !important} .ne-dgreen-border-15{border-color:rgba(20,83,45,0.15) !important} .ne-dgreen-40{color:rgba(20,83,45,0.40) !important} .ne-dgreen-ring:focus{--tw-ring-color:rgba(20,83,45,0.20) !important} .ne-dgreen-focus-border:focus{border-color:rgba(20,83,45,0.30) !important} .ne-dgreen-outline{border:2px solid #14532d !important;color:#14532d !important;background:#fff} .ne-dgreen-outline:hover{background-color:rgba(20,83,45,0.05) !important} .ne-dgreen-pill-active{background-color:#14532d !important;color:#fff !important;border-color:#14532d !important} .ne-dgreen-pill-inactive{border:2px solid #14532d !important;color:#14532d !important;background:#fff} .ne-dgreen-pill-inactive:hover{background-color:rgba(20,83,45,0.05) !important} .ne-gold-btn{background-color:#ffd54f !important;color:#14532d !important} .ne-gold-text{color:#ffd54f !important} .ne-profile-placeholder{background-color:#d1d5db !important} .ne-rg{display:grid;grid-template-columns:repeat(var(--ne-m,2),minmax(0,1fr))} @media (min-width:768px){.ne-rg{grid-template-columns:repeat(var(--ne-d,4),minmax(0,1fr))}} .ne-rg-auto{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--ne-w,160px)),1fr))} @container (max-width:159px){.ne-fit-intro{display:none !important}} .ne-qc17{width:calc(100% / var(--ne-m,2) - 4px)} @media (min-width:768px){.ne-qc17{width:calc(100% / var(--ne-d,4) - 6px)}} .ne-cols-1{grid-template-columns:repeat(1,minmax(0,1fr)) !important} .ne-cols-2{grid-template-columns:repeat(2,minmax(0,1fr)) !important} .ne-cols-3{grid-template-columns:repeat(3,minmax(0,1fr)) !important} .ne-cols-4{grid-template-columns:repeat(4,minmax(0,1fr)) !important} .ne-cols-5{grid-template-columns:repeat(5,minmax(0,1fr)) !important} .ne-cols-6{grid-template-columns:repeat(6,minmax(0,1fr)) !important}"}),c("header",{className:"sticky top-0 z-40 "+(neHdr.hdrBg?"":"bg-white ")+(neHdr.showSub&&!neSearchOpen?"":"border-b ne-dgreen-border-10"),style:neHdr.hdrBg?{backgroundColor:neHdr.hdrBg}:void 0,children:[c("div",{className:"max-w-[1280px] mx-auto px-4 flex items-center justify-between gap-3",style:{paddingTop:neHdr.pad+"px",paddingBottom:(neHdr.showSub&&!neSearchOpen?Math.max(2,Math.round(neHdr.pad/3)):neHdr.pad)+"px",minHeight:neHdr.minH?neHdr.minH+"px":void 0},children:[
   c("div",{className:"flex items-center gap-3 min-w-0",children:[
-    i("button",{onClick:()=>P(!w),"aria-label":"Menu",className:"p-1 shrink-0",children:i(Zr,{size:26,className:"ne-dgreen-text"})}),
+    i("button",{onClick:()=>P(!w),"aria-label":"Menu",className:"p-1 shrink-0",style:neHdr.hdrDark?{color:"#fff"}:void 0,children:i(Zr,{size:26,className:neHdr.hdrDark?"":"ne-dgreen-text"})}),
     (()=>{
       // Round 13: header logo joins the new Title group. ne-dgreen-text is
       // !important, so it must be dropped (not just out-styled) whenever
       // Title Colour is active, same technique used everywhere else in
       // this file for an !important class fighting an inline override.
       const t=neTitleStyle("headerLogo");
-      return i("span",{onClick:()=>f({type:"home"}),style:t.style,className:"font-[Fraunces] font-bold text-[20px] cursor-pointer truncate "+(t.hasColor?"":"ne-dgreen-text"),children:"NE Encyclopedia"});
+      return i("span",{onClick:()=>f({type:"home"}),className:"font-[Fraunces] font-bold text-[20px] cursor-pointer truncate "+(t.hasColor?"":(neHdr.hdrDark?"":"ne-dgreen-text")),style:{...(neHdr.hdrDark&&!t.hasColor?{color:"#fff"}:{}),...t.style},children:"NE Encyclopedia"});
     })()
   ]}),
   c("div",{className:"flex items-center gap-4 shrink-0",children:[
     i("button",{onClick:()=>setNeShowSuggest(!0),"aria-label":"Suggestions",className:"text-[24px] leading-none",children:"\ud83d\udca1"}),
-    i("button",{onClick:()=>setNeSearchOpen(!neSearchOpen),"aria-label":"Search",className:"p-0.5",children:i(jr,{size:22,className:"ne-dgreen-text"})}),
     neContributor?i("button",{onClick:()=>P(!0),"aria-label":"Profile",title:neContributor.displayName||"Contributor",className:"w-9 h-9 rounded-[10px] shrink-0 overflow-hidden bg-gray-200",children:neContributor.profilePhoto?i("img",{src:neContributor.profilePhoto,className:"w-full h-full object-cover",referrerPolicy:"no-referrer"}):i("div",{className:"w-full h-full flex items-center justify-center ne-dgreen-bg text-white font-bold text-[13px]",children:(neContributor.displayName||"?")[0].toUpperCase()})}):i("button",{onClick:()=>{
     if(!l){if(window._neStartGoogleSignIn)window._neStartGoogleSignIn();else alert("Google Sign-In is still loading, please try again in a moment.");}else f({type:"admin"})
   },"aria-label":"Profile",className:"w-9 h-9 rounded-[10px] ne-profile-placeholder shrink-0"})
   ]})
-]}),neSearchOpen&&i("div",{className:"max-w-[1280px] mx-auto px-4 pb-3",children:c("div",{className:"relative",children:[i(jr,{className:"absolute left-3.5 top-1/2 -translate-y-1/2 ne-dgreen-40",size:18}),i("input",{autoFocus:!0,value:d,onChange:(a)=>{if(y(a.target.value),a.target.value)f({type:"searchResults"})},placeholder:"Search Northeast Encyclopedia",className:"w-full h-11 pl-11 pr-4 rounded-full border ne-dgreen-border-15 bg-white focus:outline-none focus:ring-2 ne-dgreen-ring ne-dgreen-focus-border text-[15px] placeholder:text-gray-400 shadow-sm"}),d&&i("button",{onClick:()=>y(""),className:"absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-gray-100",children:i($n,{size:14})})]})}),]}),w&&c("div",{className:"fixed inset-0 z-50 bg-white p-4 md:hidden overflow-y-auto",style:{display:"flex",flexDirection:"column"},children:[c("div",{className:"flex justify-between items-center mb-6",children:[c("div",{children:[i("span",{className:"font-bold ne-dgreen-text",children:"Menu"}),neContributor&&i("div",{className:"text-[11px] text-gray-500 mt-0.5",children:"Signed in as "+(neContributor.displayName||"Contributor")})]}),i("button",{onClick:()=>P(!1),className:"p-2 border rounded-full",children:i($n,{})})]}),c("div",{className:"space-y-4",children:[
+]}),neSearchOpen&&i("div",{className:"max-w-[1280px] mx-auto px-4 pb-3",children:c("div",{className:"relative",children:[i(jr,{className:"absolute left-3.5 top-1/2 -translate-y-1/2 ne-dgreen-40",size:18}),i("input",{autoFocus:!0,value:d,onChange:(a)=>{if(y(a.target.value),a.target.value)f({type:"searchResults"})},placeholder:"Search Northeast Encyclopedia",className:"w-full h-11 pl-11 pr-4 rounded-full border ne-dgreen-border-15 bg-white focus:outline-none focus:ring-2 ne-dgreen-ring ne-dgreen-focus-border text-[15px] placeholder:text-gray-400 shadow-sm"}),d&&i("button",{onClick:()=>y(""),className:"absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-gray-100",children:i($n,{size:14})})]})}),]}),neHdr.showSub&&i("div",{className:(neHdr.hdrBg?"":"bg-white ")+"border-b ne-dgreen-border-10",style:neHdr.hdrBg?{backgroundColor:neHdr.hdrBg}:void 0,children:i("div",{className:"max-w-[1280px] mx-auto px-4",style:{paddingBottom:Math.max(4,neHdr.pad)+"px"},children:i("p",{style:neHdr.textStyle,className:"leading-snug "+(neHdr.textHasColor?"":"text-gray-600"),children:"Anyone can contribute by signing in with a Gmail account. Share your articles, history, local dialects, cultures, traditions, and knowledge from your community, and help preserve the rich heritage of Northeast India."})})}),w&&c("div",{"data-ne-drawer":"1",className:"fixed inset-0 z-50 bg-white p-4 md:hidden overflow-y-auto",style:{display:"flex",flexDirection:"column"},children:[i("style",{children:"[data-ne-drawer] button.h-12{height:38px!important;font-size:14px!important}[data-ne-drawer] .space-y-4>:not([hidden])~:not([hidden]){margin-top:10px!important}[data-ne-drawer] button.h-12 img{width:18px!important;height:18px!important}"}),c("div",{className:"flex items-center gap-2 border-b border-gray-100",style:{marginBottom:"12px",paddingBottom:"12px"},children:[i("p",{className:"flex-1 text-[10px] leading-snug text-gray-500",children:"If Northeast Encyclopedia was helpful, please consider supporting us."}),i("button",{onClick:()=>{P(!1);f({type:"donate"})},style:{height:"24px",fontSize:"10.5px",...neHdr.donateStyle},className:"shrink-0 px-3 rounded-full font-bold "+(neHdr.donateHasColor?"":"ne-gold-btn"),children:"Donate"})]}),c("div",{className:"flex justify-between items-center mb-6",children:[c("div",{children:[i("span",{className:"font-bold ne-dgreen-text",children:"Menu"}),neContributor&&i("div",{className:"text-[11px] text-gray-500 mt-0.5",children:"Signed in as "+(neContributor.displayName||"Contributor")})]}),i("button",{onClick:()=>P(!1),className:"p-2 border rounded-full",children:i($n,{})})]}),c("div",{className:"space-y-4",children:[
   i("button",{onClick:()=>{f({type:"home"}),P(!1)},className:"w-full h-12 rounded-full ne-dgreen-bg text-white font-semibold transition-colors",children:"Home"}),
   !neContributor&&i("button",{onClick:()=>{if(window._neStartGoogleSignIn)window._neStartGoogleSignIn();else alert("Google Sign-In is still loading, please try again in a moment.");P(!1)},className:"w-full h-12 rounded-full ne-dgreen-bg text-white font-semibold transition-colors",children:"Create Account"}),
 neContributor&&i("button",{onClick:()=>{setNeContributor(null);try{localStorage.removeItem("ne_contributor")}catch{};P(!1)},className:"w-full h-12 rounded-full ne-dgreen-bg text-white font-semibold transition-colors",children:"Logout (Contributor)"}),
   l&&i("button",{onClick:()=>{try{window._neAllowLogout&&window._neAllowLogout();localStorage.removeItem("ne_current_user");localStorage.removeItem("ne_auth_token");sessionStorage.clear();fetch("/api/logout",{method:"POST"}).catch(()=>{})}catch(e){}u(null);P(!1);location.reload()},className:"w-full h-12 rounded-full ne-dgreen-bg text-white font-semibold transition-colors",children:"Logout"}),
   i("button",{onClick:()=>setNeSettingsOpen(!neSettingsOpen),className:"w-full h-12 rounded-full ne-dgreen-bg text-white font-semibold transition-colors",children:"Settings"}),
   neSettingsOpen&&c("div",{className:"relative",children:[
-    i("button",{onClick:()=>{setNeFontPanelOpen(!neFontPanelOpen),setNeColourPanelOpen(!1)},className:"w-full h-12 rounded-full ne-dgreen-bg text-white font-semibold transition-colors",children:"Font Size"}),
+    i("button",{onClick:()=>{setNeFontPanelOpen(!neFontPanelOpen),setNeColourPanelOpen(!1),setNeNavIconPanelOpen(!1)},className:"w-full h-12 rounded-full ne-dgreen-bg text-white font-semibold transition-colors",children:"Font Size"}),
     neFontPanelOpen&&c("div",{style:{position:"absolute",top:"4px",right:"8px",zIndex:20},className:"bg-white border-2 ne-dgreen-border rounded-2xl p-2 flex flex-col gap-1.5 shadow-lg",children:["Standard","Medium","Large"].map((sz)=>i("button",{onClick:()=>{setNeFontSize(sz),setNeFontPanelOpen(!1)},className:"h-9 px-4 rounded-full text-[12px] font-semibold whitespace-nowrap transition-colors "+(neFontSize===sz?"ne-dgreen-pill-active":"ne-dgreen-pill-inactive"),children:sz},sz))})
   ]}),
   neSettingsOpen&&c("div",{className:"relative",children:[
-    i("button",{onClick:()=>{setNeColourPanelOpen(!neColourPanelOpen),setNeFontPanelOpen(!1)},className:"w-full h-12 rounded-full ne-dgreen-bg text-white font-semibold transition-colors",children:"Colour"}),
+    i("button",{onClick:()=>{setNeColourPanelOpen(!neColourPanelOpen),setNeFontPanelOpen(!1),setNeNavIconPanelOpen(!1)},className:"w-full h-12 rounded-full ne-dgreen-bg text-white font-semibold transition-colors",children:"Colour"}),
     neColourPanelOpen&&c("div",{style:{position:"absolute",top:"4px",right:"8px",zIndex:20},className:"bg-white border-2 ne-dgreen-border rounded-2xl p-2 flex flex-col gap-1.5 shadow-lg",children:["White","Dark"].map((cm)=>i("button",{onClick:()=>{setNeColorMode(cm),setNeColourPanelOpen(!1)},className:"h-9 px-4 rounded-full text-[12px] font-semibold whitespace-nowrap transition-colors "+(neColorMode===cm?"ne-dgreen-pill-active":"ne-dgreen-pill-inactive"),children:cm},cm))})
+  ]}),
+  neSettingsOpen&&c("div",{className:"relative",children:[
+    i("button",{onClick:()=>{setNeNavIconPanelOpen(!neNavIconPanelOpen),setNeFontPanelOpen(!1),setNeColourPanelOpen(!1)},className:"w-full h-12 rounded-full ne-dgreen-bg text-white font-semibold transition-colors",children:"Bottom Icons"}),
+    neNavIconPanelOpen&&c("div",{style:{position:"absolute",top:"4px",right:"8px",zIndex:20},className:"bg-white border-2 ne-dgreen-border rounded-2xl p-2 flex flex-col gap-1.5 shadow-lg",children:["Small","Medium","Large"].map((sz)=>i("button",{onClick:()=>{neSetNavIconSize(sz),setNeNavIconPanelOpen(!1)},className:"h-9 px-4 rounded-full text-[12px] font-semibold whitespace-nowrap transition-colors "+(neNavIconSize===sz?"ne-dgreen-pill-active":"ne-dgreen-pill-inactive"),children:sz},sz))})
   ]}),
   neContributor&&i("button",{onClick:async()=>{
     V({type:"contributorDashboard"});P(!1);
@@ -2809,227 +2891,7 @@ neContributor&&i("button",{onClick:()=>{setNeContributor(null);try{localStorage.
   i("textarea",{value:neSuggestText,onChange:(a)=>setNeSuggestText(a.target.value),placeholder:"Write your suggestion here...",className:"w-full min-h-[110px] p-3 rounded-xl border ne-dgreen-border-15 focus:outline-none focus:ring-2 ne-dgreen-ring text-[14px]"}),
   i("p",{className:"text-[11px] text-gray-500 mt-2",children:"Your suggestion helps improve Northeast Encyclopedia. It will not be published as an article."}),
   i("button",{onClick:async()=>{if(!neSuggestText.trim())return;try{const neAsContributor=!!(neContributor&&neContributor.token&&!l);const res=neAsContributor?await fetch("/api/contributor/suggest",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+neContributor.token},body:JSON.stringify({content:neSuggestText.trim(),category:"general"})}):await fetch("/api/suggestions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({suggestion:neSuggestText.trim()})});const d=await res.json().catch(()=>({}));if(res.ok&&d.success!==false){alert("Thank you \u2014 your suggestion was submitted.");setNeSuggestText("");setNeShowSuggest(!1)}else{alert("Could not submit: "+(d.error||res.status))}}catch(e){alert("Network error \u2014 could not reach the server.")}},className:"w-full h-11 rounded-full ne-dgreen-bg text-white font-bold mt-3",children:"Submit"})
-]})}),m&&i("div",{className:"fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4",children:c("div",{className:"bg-white rounded-[20px] w-full max-w-[420px] p-6 shadow-2xl",children:[c("div",{className:"flex justify-between items-start mb-4",children:[c("div",{children:[i("h3",{className:"text-2xl font-bold text-[#1a237e]",children:"Welcome back"}),i("p",{className:"text-sm text-gray-500",children:"Log in to edit and contribute"})]}),i("button",{onClick:()=>g(!1),className:"p-2 rounded-full bg-gray-100",children:i($n,{size:16})})]}),c("div",{className:"space-y-3",children:[c("div",{children:[i("label",{className:"text-xs font-semibold text-gray-600",children:"Username"}),i("input",{value:v.username,onChange:(a)=>E({...v,username:a.target.value}),placeholder:"benjamin",className:"w-full mt-1 h-11 px-4 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a237e]/20"})]}),c("div",{children:[i("label",{className:"text-xs font-semibold text-gray-600",children:"Password"}),i("input",{type:"password",value:v.password,onChange:(a)=>E({...v,password:a.target.value}),placeholder:"••••••••",className:"w-full mt-1 h-11 px-4 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a237e]/20"})]}),i("button",{onClick:Gd,className:"w-full h-11 rounded-xl bg-[#1a237e] text-white font-semibold hover:bg-[#283593]",children:"Log in"}),c("div",{className:"bg-[#fff8e1] border border-[#ff6f00]/20 rounded-xl p-3 text-[12px]",children:[i("p",{className:"font-bold text-[#bf360c]",children:"Demo Accounts:"}),c("p",{children:[i("b",{children:"Super Admin:"})," benjamin / "]}),c("p",{children:[i("b",{children:"Admin:"})," admin1 / "]}),c("p",{children:[i("b",{children:"Editor:"})," editor_khasi / "]})]})]})]})}),c("main",{className:"max-w-[1280px] mx-auto px-4 md:px-6 py-6 md:py-8",children:[(neRenderHomeContent=(e)=>c(tl,{children:[an("AD_TOP"),c("div",{className:"flex flex-col gap-0",children:[(neHomeSectionEnabled(neGetPublicHomeDesign(e.settings.publicHomeDesign),"hero")&&c("div",{style:neHomeSectionOrderStyle(neGetPublicHomeDesign(e.settings.publicHomeDesign),"hero"),children:[(()=>{
-  // Round 6: Hero/Banner Shape/Size/Colour (card) and Font Size (title). No
-  // Orientation (single, non-repeating item — nothing to orient). "None"
-  // on every control renders byte-identical to the pre-round-6 hardcoded
-  // markup below (neSectionShapeStyle/neSectionSizeStyle/neSectionColorStyle/
-  // neSectionFontSizeStyle all return {} when unset).
-  const heroVis=neSectionVisualDesign(neGetPublicHomeDesign(e.settings.publicHomeDesign),"hero");
-  // The shared neSectionSizeStyle presets (36-72px tall, horizontal-only
-  // padding) are tuned for buttons and would either clip this text-heavy
-  // banner's multi-line content or squash its vertical padding to zero, so
-  // Hero/Banner uses its own banner-appropriate preset scale on the SAME
-  // stored categorySize/categorySizeCustom field (no new/duplicate storage
-  // — only how it's interpreted at render time differs for this section).
-  // Bug-fix round B: the original preset scale below (10-28px padding /
-  // 90-180px minHeight) was too close to the Hero's natural multi-line
-  // content height (well over 180px on most phones) and its own p-3/md:p-4
-  // (12-16px) default padding to ever look different — "large" could even
-  // be SMALLER than the content's natural height, making minHeight a no-op.
-  // Scaled up so every step is unmistakably, visibly different both from
-  // the default and from its neighbours; "standard" now matches today's
-  // real-world look so picking it deliberately looks like "no visual change".
-  // Round 7: "smaller" pushed further down (was 8px/70px) and the Custom
-  // floor lowered from 60px to 20px, now that Font Size also shrinks the
-  // paragraph text below (see NE_HERO_TEXT_PRESETS) -- the box's real floor
-  // used to be the paragraph text's own natural height, which barely moved
-  // before this round no matter how small Size was set.
-  const NE_HERO_SIZE_PRESETS={
-    smaller:{padding:"4px",minHeight:"40px"},
-    standard:{padding:"16px",minHeight:"130px"},
-    medium:{padding:"32px",minHeight:"220px"},
-    large:{padding:"48px",minHeight:"320px"}
-  };
-  let heroSizeStyle={};
-  // Fill to box: when the banner has a height (Box Tall, Custom height or a
-  // Size preset) the green box is exactly that tall and everything inside is
-  // fitted to it (see neFillFit). None keeps today's banner unchanged.
-  const heroRawSv=(()=>{try{const d0=neGetPublicHomeDesign(e.settings.publicHomeDesign);const v0=d0&&d0.sectionVisuals&&d0.sectionVisuals.hero;return v0&&typeof v0==="object"?v0:{};}catch(err){return {};}})();
-  const NE_HERO_FILL_PRESETS={smaller:100,standard:170,medium:240,large:320};
-  let heroFillH=0;
-  if(typeof heroRawSv.boxTallPx==="number"&&heroRawSv.boxTallPx>=24&&heroRawSv.boxTallPx<=800) heroFillH=heroRawSv.boxTallPx;
-  else if(heroVis&&heroVis.categorySize==="custom"&&heroVis.categorySizeCustom&&typeof heroVis.categorySizeCustom==="object"){ const hh0=heroVis.categorySizeCustom.height; heroFillH=(typeof hh0==="number"&&hh0>=20&&hh0<=500?hh0:130); }
-  else if(heroVis&&typeof heroVis.categorySize==="string"&&NE_HERO_FILL_PRESETS[heroVis.categorySize]) heroFillH=NE_HERO_FILL_PRESETS[heroVis.categorySize];
-  if(heroFillH){
-    heroSizeStyle={height:heroFillH+"px",minHeight:0,padding:Math.max(4,Math.min(32,Math.round(heroFillH*0.1)))+"px",display:"flex",flexDirection:"column",justifyContent:"center"};
-  }else if(heroVis&&heroVis.categorySize==="custom"&&heroVis.categorySizeCustom&&typeof heroVis.categorySizeCustom==="object"){
-    const hh=heroVis.categorySizeCustom.height;
-    heroSizeStyle={minHeight:(typeof hh==="number"&&hh>=20&&hh<=500?hh:130)+"px"};
-  }else if(heroVis&&typeof heroVis.categorySize==="string"&&NE_HERO_SIZE_PRESETS[heroVis.categorySize]){
-    heroSizeStyle=NE_HERO_SIZE_PRESETS[heroVis.categorySize];
-  }
-  // Round 8d: neLockNoBoxBackground forces the background back to
-  // transparent whenever Shape="none", no matter what Colour is stored --
-  // Colour used to always win when merged after Shape (spread order), which
-  // is exactly why a stray black Colour selection made "No Box" look broken.
-  const heroStyle=neLockNoBoxBackground({...heroSizeStyle,...neSectionShapeStyle(heroVis),...neSectionColorStyle(heroVis)},heroVis&&heroVis.categoryShape);
-  // Round 7 bug fix: Font Size used to apply ONLY to the title, but the two
-  // paragraphs below (the "Explore the knowledge..." and "Anyone can
-  // contribute..." text) are what actually take up most of the box's
-  // height -- scaling only the title left the box unable to shrink past
-  // that paragraph text's own natural size. Every text element inside Hero
-  // now scales together, in the SAME proportions as today's real sizes, so
-  // "standard" renders byte-identical to today (16px/10.5px/10.5px/9.5px).
-  const NE_HERO_TEXT_PRESETS={
-    small:{title:"12px",tagline:"8px",body1:"8px",body2:"7px"},
-    standard:{title:"16px",tagline:"10.5px",body1:"10.5px",body2:"9.5px"}, // today's exact default
-    medium:{title:"22px",tagline:"14px",body1:"14px",body2:"13px"},
-    large:{title:"28px",tagline:"18px",body1:"18px",body2:"17px"}
-  };
-  // Round 7: auto-scale -- if a Size preset is chosen but Font Size is left
-  // on None, the text follows the box size automatically (a smaller box
-  // gets smaller text too), so shrinking the box doesn't require a second,
-  // separate trip to the Font Size control. Explicitly picking a Font Size
-  // always overrides this and wins.
-  const NE_HERO_SIZE_TO_FONT_KEY={smaller:"small",standard:"standard",medium:"medium",large:"large"};
-  let heroFontKey=null;
-  if(heroVis&&typeof heroVis.sectionFontSize==="string"&&heroVis.sectionFontSize!=="custom"&&NE_HERO_TEXT_PRESETS[heroVis.sectionFontSize]){
-    heroFontKey=heroVis.sectionFontSize; // explicit Font Size preset always wins
-  }else if(!heroFillH&&!(heroVis&&heroVis.sectionFontSize)&&heroVis&&typeof heroVis.categorySize==="string"&&NE_HERO_SIZE_TO_FONT_KEY[heroVis.categorySize]){
-    heroFontKey=NE_HERO_SIZE_TO_FONT_KEY[heroVis.categorySize]; // no explicit Font Size -> auto-scale from Size
-  }
-  let heroTitleStyle={},heroTaglineStyle={},heroBody1Style={},heroBody2Style={};
-  if(heroVis&&heroVis.sectionFontSize==="custom"&&heroVis.sectionFontSizeCustom&&typeof heroVis.sectionFontSizeCustom==="object"){
-    const fvRaw=heroVis.sectionFontSizeCustom.fontSize;
-    const fv=(typeof fvRaw==="number"&&fvRaw>=8&&fvRaw<=48)?fvRaw:16;
-    heroTitleStyle={fontSize:fv+"px"};
-    heroTaglineStyle={fontSize:(Math.round(fv*0.65625*10)/10)+"px"};
-    heroBody1Style={fontSize:(Math.round(fv*0.65625*10)/10)+"px"};
-    heroBody2Style={fontSize:(Math.round(fv*0.59375*10)/10)+"px"};
-  }else if(heroFontKey){
-    const tp=NE_HERO_TEXT_PRESETS[heroFontKey];
-    heroTitleStyle={fontSize:tp.title};
-    heroTaglineStyle={fontSize:tp.tagline};
-    heroBody1Style={fontSize:tp.body1};
-    heroBody2Style={fontSize:tp.body2};
-  }else if(heroFillH){
-    // Fill to box keeps the banner's own designed proportions (title biggest)
-    // and then sizes the whole set to the box.
-    const tp=NE_HERO_TEXT_PRESETS.standard;
-    heroTitleStyle={fontSize:tp.title};
-    heroTaglineStyle={fontSize:tp.tagline};
-    heroBody1Style={fontSize:tp.body1};
-    heroBody2Style={fontSize:tp.body2};
-  }
-  // No Size preset AND no Font Size override -> all four stay {} and every
-  // element keeps its original hardcoded text-[..] class, byte-identical to
-  // today.
-  // ne-dgreen-bg is defined with !important in the stylesheet, so it would
-  // silently block an inline backgroundColor override. When a Colour is
-  // set for this section, drop that class so the override is actually visible.
-  const heroClassName=(heroStyle.backgroundColor?"rounded-[28px] text-white overflow-hidden relative p-3 md:p-4":"rounded-[28px] ne-dgreen-bg text-white overflow-hidden relative p-3 md:p-4");
-  // Bug fix (found this round): "No Box" makes the background transparent,
-  // but every text element in Hero was hardcoded to text-white (readable
-  // only against the dark-green background) -- with No Box the text turned
-  // white-on-white and effectively vanished, which is why "No Box" looked
-  // like it "did nothing" even though the background WAS going transparent.
-  // Swap to the site's dark text colour specifically when background is
-  // transparent; any other background (default dark green OR a picked
-  // Colour) keeps the existing white text exactly as before.
-  const heroIsNoBox=heroStyle.backgroundColor==="transparent";
-  // Round 8d: Font Colour -- an explicit admin override always wins over
-  // the automatic No-Box readability swap above. When it's set, we drop the
-  // hardcoded colour class entirely (title/body1/body2 all have no OTHER
-  // !important colour class fighting them) so the inline "color" from
-  // neSectionFontColorStyle is what actually renders. Tagline and the
-  // Donate button keep their fixed brand gold colour untouched -- same
-  // brand-preserving scope Font Size already used (Donate was left
-  // unscaled there too).
-  const heroFontColorStyle=neSectionFontColorStyle(heroVis);
-  // Round 9: Font Family/Bold/Italic/Underline/Letter Spacing/Text Align --
-  // same brand-preserving scope as Font Size/Font Colour above (the two
-  // body paragraphs only, since Round 13 -- see below; tagline and the
-  // Donate button keep their fixed brand-gold styling untouched).
-  const heroFontExtraStyle=neSectionFontExtraStyle(heroVis);
-  const heroHasFontColor=!!heroFontColorStyle.color;
-  // Round 13: the title split OUT of this Font Colour group (user: "wire
-  // the line inside the banner together and donate button separately" was
-  // Round 12; this round the title itself joins the new sitewide Title
-  // group instead, alongside the header logo and 3 section headings --
-  // see neTitleStyle/NE_TITLE_OPTIONS above). Body1/body2 stay exactly as
-  // Round 8/9 left them.
-  const heroTitleTitleStyle=neTitleStyle("heroTitle");
-  // LIVE safety: the banner title is fixed site identity, not content loaded
-  // from a category or D1 label. Keep the exact public title independent of
-  // the selected category (including Local Media) and of Studio projection.
-  const heroBannerTitle="Northeast Encyclopedia";
-  heroTitleStyle={...heroTitleStyle,...heroTitleTitleStyle.style};
-  heroBody1Style={...heroBody1Style,...heroFontColorStyle,...heroFontExtraStyle};
-  heroBody2Style={...heroBody2Style,...heroFontColorStyle,...heroFontExtraStyle};
-  // Round 12: the tagline joins the SAME Font Colour group as body1/body2
-  // above (user: "wire the line inside the banner together" with those, as
-  // one) -- only Font Colour, not Font Extra (Bold/Italic/Underline/Font
-  // Family/Letter Spacing/Text Align), which was never asked for here and
-  // stays scoped to body1/body2 only, same as before. ne-gold-text is
-  // !important, so it must be dropped (not just out-styled) whenever a
-  // Font Colour override is active, same technique already used for
-  // heroTextClass below.
-  heroTaglineStyle={...heroTaglineStyle,...heroFontColorStyle};
-  const heroTaglineClass="mt-1.5 text-[10.5px] font-semibold leading-snug "+(heroHasFontColor?"":"ne-gold-text");
-  const heroTextClass=heroHasFontColor?"":(heroIsNoBox?"ne-dgreen-text":"text-white");
-  const heroClassNameFixed=heroClassName.replace("text-white",heroTextClass);
-  // Round 13: the title needs its OWN fallback text-colour class, now that
-  // it no longer shares heroHasFontColor/heroTextClass with the
-  // tagline/body group -- without this, setting Font Colour (tagline/body)
-  // while leaving Title Colour unset would make the title inherit the
-  // container's className directly, which would go BLANK (heroTextClass
-  // becomes "" whenever heroHasFontColor is true) and the title would fall
-  // through to the page's default near-black text, invisible against the
-  // dark green banner. Mirrors the exact same heroIsNoBox-aware pattern as
-  // heroTextClass, just driven by the title's OWN colour state instead.
-  const heroTitleTextClass=heroTitleTitleStyle.hasColor?"":(heroIsNoBox?"ne-dgreen-text":"text-white");
-  // Round 12: Donate button colour -- a NEW, separate control from Font
-  // Colour above (user: "donate button separately"). Reuses
-  // neSectionColorStyle (the exact same background-colour logic every
-  // per-section Colour control already uses -- no new/duplicate colour
-  // system) against a new donateColor/donateColorCustom pair stored
-  // alongside Hero's other per-section fields. {} (no override) when
-  // unset, so this is a pure no-op and the button stays its exact current
-  // gold byte-for-byte until this new control is actually used.
-  const heroDonateBtnStyle=neSectionColorStyle(heroVis?{sectionColor:heroVis.donateColor,sectionColorCustom:heroVis.donateColorCustom}:null);
-  const heroDonateHasColor=!!heroDonateBtnStyle.backgroundColor;
-  const heroDonateStyle=heroDonateHasColor?{backgroundColor:heroDonateBtnStyle.backgroundColor,color:"#14532d"}:{};
-  const heroDonateClass="mt-1.5 h-6 px-3 rounded-full font-bold text-[10.5px] "+(heroDonateHasColor?"":"ne-gold-btn");
-  if(heroFillH) Object.assign(heroDonateStyle,{fontSize:(heroTaglineStyle.fontSize||"10.5px")});
-  const heroKids=[
-    c("h1",{style:heroTitleStyle,className:"text-[16px] md:text-[19px] font-bold tracking-tight "+heroTitleTextClass,children:heroBannerTitle}),
-    i("p",{style:heroTaglineStyle,className:heroTaglineClass,children:"If Northeast Encyclopedia was helpful, please consider supporting us."}),
-    i("button",{onClick:()=>f({type:"donate"}),style:heroDonateStyle,className:heroDonateClass,children:"Donate"}),
-    i("p",{style:heroBody1Style,className:"mt-2 text-[10.5px] leading-snug "+heroTextClass,children:"Explore the knowledge, history, cultures, and voices of Northeast India."}),
-    i("p",{style:heroBody2Style,className:"mt-1 text-[9.5px] leading-snug "+(heroHasFontColor?"opacity-80":(heroIsNoBox?"ne-dgreen-text opacity-80":"text-white/75")),children:"Anyone can contribute by signing in with a Gmail account. Share your articles, history, local dialects, cultures, traditions, and knowledge from your community, and help preserve the rich heritage of Northeast India."})
-  ];
-  if(heroFillH) return i("div",{style:heroStyle,className:heroClassNameFixed,"data-ne-fill":"hero","data-ne-fill-max":(heroVis&&heroVis.sectionFontSize)?"1":"8",children:c("div",{children:heroKids})});
-  return c("div",{style:heroStyle,className:heroClassNameFixed,children:heroKids});
-})()]})),(neHomeSectionEnabled(neGetPublicHomeDesign(e.settings.publicHomeDesign),"quickActions")&&c("div",{style:neHomeSectionOrderStyle(neGetPublicHomeDesign(e.settings.publicHomeDesign),"quickActions"),children:[(()=>{
-  // Round 6: Quick Action Buttons — Shape/Size/FontSize/Colour per-button,
-  // plus Orientation: "vertical" stacks the buttons in a column; the
-  // section's own existing default (a horizontal scrolling row) is what
-  // "None" (and explicit "horizontal"/"swipe") both preserve.
-  const qaVis=neSectionVisualDesign(neGetPublicHomeDesign(e.settings.publicHomeDesign),"quickActions");
-  const qaFontColorStyle=neSectionFontColorStyle(qaVis);
-  const qaFontExtraStyle=neSectionFontExtraStyle(qaVis);
-  const qaStyle=neLockNoBoxBackground({...neSectionShapeStyle(qaVis),...neSectionSizeStyle(qaVis),...neSectionFontSizeStyle(qaVis),...neSectionColorStyle(qaVis),...qaFontColorStyle,...qaFontExtraStyle},qaVis&&qaVis.categoryShape);
-  const qaVertical=!!(qaVis&&qaVis.categoryOrientation==="vertical");
-  if(qaVis&&typeof qaVis.categorySize==="string"&&qaVis.categorySize&&!qaVis.sectionFontSize&&qaStyle.height){ const qaH=parseFloat(qaStyle.height)||48; qaStyle.fontSize=Math.max(6,Math.round(qaH*0.42))+"px"; }
-  const items=[
-    {label:"Write Article",action:()=>{if(!Qt&&!neContributor){neCreateAccountPrompt("Writing an Article");return}p({}),f({type:"editArticle"}),h("edit")}},
-    {label:"Open Dictionary",action:()=>f({type:"dictionary"})},
-    {label:"Add Word",action:()=>{if(!Qt&&!neContributor){neCreateAccountPrompt("Adding a Dictionary Word");return}p({}),f({type:"addWord"})}},
-    {label:"Write Stories",action:()=>{if(!Qt&&!neContributor){neCreateAccountPrompt("Writing a Story");return}p({}),f({type:"addStory"})}}
-  ];
-  // ne-dgreen-bg is !important in the stylesheet and would block an inline
-  // backgroundColor override; drop it when a Colour is set for this section.
-  const qaBtnClassName=(qaStyle.backgroundColor?"shrink-0 h-12 px-6 rounded-full text-white font-semibold whitespace-nowrap":"shrink-0 h-12 px-6 rounded-full ne-dgreen-bg text-white font-semibold whitespace-nowrap");
-  // Bug fix (found this round): same white-text-on-transparent-background
-  // problem as Hero -- "No Box" turned the button text invisible. Swap to
-  // dark text only when the background is actually transparent.
-  // Round 8d: an explicit Font Colour always wins -- drop the hardcoded
-  // colour class entirely so the inline color (merged into qaStyle above)
-  // actually renders instead of being fought by a class.
-  const qaBtnClassNameFixed=qaFontColorStyle.color?qaBtnClassName.replace("text-white",""):((qaStyle.backgroundColor==="transparent")?qaBtnClassName.replace("text-white","ne-dgreen-text"):qaBtnClassName);
-  return c("div",{className: qaVertical?"mt-4 flex flex-col gap-2.5":"mt-4 flex gap-2.5 overflow-x-auto scrollbar-none pb-1",children:items.map((item)=>i("button",{key:item.label,onClick:item.action,style:qaStyle,className:qaBtnClassNameFixed,children:item.label}))});
-})()]})),(neHomeSectionEnabled(neGetPublicHomeDesign(e.settings.publicHomeDesign),"dailyNews")&&c("div",{style:neHomeSectionOrderStyle(neGetPublicHomeDesign(e.settings.publicHomeDesign),"dailyNews"),children:[
+]})}),m&&i("div",{className:"fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4",children:c("div",{className:"bg-white rounded-[20px] w-full max-w-[420px] p-6 shadow-2xl",children:[c("div",{className:"flex justify-between items-start mb-4",children:[c("div",{children:[i("h3",{className:"text-2xl font-bold text-[#1a237e]",children:"Welcome back"}),i("p",{className:"text-sm text-gray-500",children:"Log in to edit and contribute"})]}),i("button",{onClick:()=>g(!1),className:"p-2 rounded-full bg-gray-100",children:i($n,{size:16})})]}),c("div",{className:"space-y-3",children:[c("div",{children:[i("label",{className:"text-xs font-semibold text-gray-600",children:"Username"}),i("input",{value:v.username,onChange:(a)=>E({...v,username:a.target.value}),placeholder:"benjamin",className:"w-full mt-1 h-11 px-4 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a237e]/20"})]}),c("div",{children:[i("label",{className:"text-xs font-semibold text-gray-600",children:"Password"}),i("input",{type:"password",value:v.password,onChange:(a)=>E({...v,password:a.target.value}),placeholder:"••••••••",className:"w-full mt-1 h-11 px-4 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a237e]/20"})]}),i("button",{onClick:Gd,className:"w-full h-11 rounded-xl bg-[#1a237e] text-white font-semibold hover:bg-[#283593]",children:"Log in"}),c("div",{className:"bg-[#fff8e1] border border-[#ff6f00]/20 rounded-xl p-3 text-[12px]",children:[i("p",{className:"font-bold text-[#bf360c]",children:"Demo Accounts:"}),c("p",{children:[i("b",{children:"Super Admin:"})," benjamin / "]}),c("p",{children:[i("b",{children:"Admin:"})," admin1 / "]}),c("p",{children:[i("b",{children:"Editor:"})," editor_khasi / "]})]})]})]})}),c("main",{className:"max-w-[1280px] mx-auto px-4 md:px-6 py-6 md:py-8",children:[(neRenderHomeContent=(e)=>c(tl,{children:[an("AD_TOP"),c("div",{className:"flex flex-col gap-0",children:[(neHomeSectionEnabled(neGetPublicHomeDesign(e.settings.publicHomeDesign),"dailyNews")&&c("div",{style:neHomeSectionOrderStyle(neGetPublicHomeDesign(e.settings.publicHomeDesign),"dailyNews"),children:[
 c("div",{className:"mt-4",children:[
   (()=>{
     let dbCats=(neCategories.length>0?neCategories:[]);
@@ -3744,7 +3606,7 @@ o.type==="addStory"&&c("div",{className:"p-6 bg-white rounded-[20px] border max-
   (neContributor&&!l)&&c("label",{className:"flex items-center gap-2 text-[13px] font-medium",children:[i("input",{type:"checkbox",checked:!!s.isAnonymous,onChange:(a)=>p({...s,isAnonymous:a.target.checked}),style:{width:"16px",height:"16px"}}),"Post anonymously"]}),
   c("div",{className:"flex gap-2",children:[i("button",{onClick:xiStory,className:"h-11 px-6 rounded-xl bg-[#1a237e] text-white font-bold",children:"Save & Publish"}),i("button",{onClick:()=>{p({});f({type:"storyList"})},className:"h-11 px-6 rounded-xl border border-gray-200 font-semibold",children:"Cancel"})]})
 ]})]}),
-o.type==="dictionary"&&c("div",{children:[i("h1",{className:"text-[32px] font-bold text-[#1a237e]",children:"Northeast Dictionary"}),i("p",{className:"text-gray-600",children:"Search by word, meaning, language, tribe, state."}),c("div",{className:"mt-4 relative max-w-[520px]",children:[i(jr,{className:"absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400",size:18}),i("input",{value:neDictSearch,onChange:(a)=>setNeDictSearch(a.target.value),placeholder:"🔍 Search Dictionary (word, meaning, language...)",className:"w-full h-11 pl-11 pr-4 rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a237e]/20 focus:border-[#1a237e] text-[15px]"}),neDictSearch&&i("button",{onClick:()=>setNeDictSearch(""),className:"absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-gray-100",children:i($n,{size:14})})]}),c("div",{className:"mt-4 grid md:grid-cols-[1fr_300px] gap-6",children:[i("div",{children:c("div",{className:"grid gap-3 mt-4",children:[e.dict.filter((a)=>!neDictSearch||a.word.toLowerCase().includes(neDictSearch.toLowerCase())||a.meaning.toLowerCase().includes(neDictSearch.toLowerCase())||a.language.toLowerCase().includes(neDictSearch.toLowerCase())||(a.tribe||"").toLowerCase().includes(neDictSearch.toLowerCase())||(a.state||"").toLowerCase().includes(neDictSearch.toLowerCase())).length===0&&i("div",{className:"p-6 rounded-xl bg-gray-50 text-center text-gray-500 text-sm",children:neDictSearch?"No dictionary entries match your search.":"No dictionary entries yet."}),e.dict.filter((a)=>!neDictSearch||a.word.toLowerCase().includes(neDictSearch.toLowerCase())||a.meaning.toLowerCase().includes(neDictSearch.toLowerCase())||a.language.toLowerCase().includes(neDictSearch.toLowerCase())||(a.tribe||"").toLowerCase().includes(neDictSearch.toLowerCase())||(a.state||"").toLowerCase().includes(neDictSearch.toLowerCase())).map((a)=>c("div",{className:"p-4 rounded-xl border bg-white flex justify-between gap-4",children:[c("div",{children:[c("div",{className:"font-bold text-[#1a237e] text-[16px]",children:[a.word," ",c("span",{className:"text-gray-400 font-normal text-[12px]",children:["/",a.pronunciation,"/"]})]}),i("div",{className:"text-[14px] mt-1",children:a.meaning}),c("div",{className:"text-[12px] text-gray-500 mt-1",children:[a.language," • ",a.tribe," • ",a.state]}),c("div",{className:"text-[12px] text-gray-600 mt-2 italic",children:["Ex: ",a.example]}),(Ze||(neContributor&&a.contributor===neContributor.id))&&c("div",{className:"flex gap-2 mt-2",children:[i("button",{onClick:()=>{p({id:a.id,word:a.word,language:a.language,tribe:a.tribe,state:a.state,meaning:a.meaning,example:a.example,pronunciation:a.pronunciation,altSpelling:a.altSpelling,source:a.source,contributor:a.contributor,dateAdded:a.dateAdded}),f({type:"addWord"})},className:"text-[11px] px-3 py-1.5 rounded-full border ne-dgreen-border ne-dgreen-text font-semibold",children:"Edit"}),i("button",{onClick:async()=>{if(!confirm('Delete "'+a.word+'"? This cannot be undone.'))return;try{let token=l?localStorage.getItem("ne_auth_token"):(neContributor?neContributor.token:null);let res=await fetch("/api/d1/delete-dictionary",{method:"POST",headers:{"Content-Type":"application/json",...(token?{"Authorization":"Bearer "+token}:{})},credentials:"include",body:JSON.stringify({id:a.id})});let d=await res.json().catch(()=>({}));if(!res.ok||d.success===false){alert("Could not delete: "+(d.error||res.status));return}n((ye)=>({...ye,dict:ye.dict.filter((w)=>w.id!==a.id)}));}catch(err){alert("Network error \u2014 could not reach the server. Nothing was deleted.")}},className:"text-[11px] px-3 py-1.5 rounded-full border border-red-300 text-red-600 font-semibold",children:"Remove"})]}),neEngagementBlock("word",a.id,{downloadText:a.word+"\n\n"+a.meaning+(a.example?"\n\nExample: "+a.example:""),downloadName:(a.word||"word")+".txt",shareTitle:a.word,shareUrl:typeof window!=="undefined"?window.location.origin+"/?word="+a.id:""})]}),c("div",{className:"text-[10px] text-gray-400 text-right",children:["By ",a.isAnonymous?"Anonymous Contributor":(a.source||a.contributor),i("br",{}),new Date(a.dateAdded).toLocaleDateString(),
+o.type==="dictionary"&&c("div",{children:[c("div",{className:"flex items-start justify-between gap-3",children:[c("div",{className:"min-w-0",children:[i("h1",{className:"text-[22px] font-bold text-[#1a237e] leading-tight",children:"Northeast Dictionary"}),i("p",{className:"text-[12px] text-gray-600 mt-0.5",children:"Search by word, meaning, language, tribe, state."})]}),i("button",{onClick:neAddWord,style:{height:"28px",whiteSpace:"nowrap"},className:"shrink-0 mt-0.5 px-3 rounded-full ne-dgreen-bg text-white text-[11px] font-semibold",children:"➕ Add Word"})]}),c("div",{className:"mt-4 relative max-w-[520px]",children:[i(jr,{className:"absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400",size:18}),i("input",{value:neDictSearch,onChange:(a)=>setNeDictSearch(a.target.value),placeholder:"🔍 Search Dictionary (word, meaning, language...)",className:"w-full h-11 pl-11 pr-4 rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a237e]/20 focus:border-[#1a237e] text-[15px]"}),neDictSearch&&i("button",{onClick:()=>setNeDictSearch(""),className:"absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-gray-100",children:i($n,{size:14})})]}),c("div",{className:"mt-4 grid md:grid-cols-[1fr_300px] gap-6",children:[i("div",{children:c("div",{className:"grid gap-3 mt-4",children:[e.dict.filter((a)=>!neDictSearch||a.word.toLowerCase().includes(neDictSearch.toLowerCase())||a.meaning.toLowerCase().includes(neDictSearch.toLowerCase())||a.language.toLowerCase().includes(neDictSearch.toLowerCase())||(a.tribe||"").toLowerCase().includes(neDictSearch.toLowerCase())||(a.state||"").toLowerCase().includes(neDictSearch.toLowerCase())).length===0&&i("div",{className:"p-6 rounded-xl bg-gray-50 text-center text-gray-500 text-sm",children:neDictSearch?"No dictionary entries match your search.":"No dictionary entries yet."}),e.dict.filter((a)=>!neDictSearch||a.word.toLowerCase().includes(neDictSearch.toLowerCase())||a.meaning.toLowerCase().includes(neDictSearch.toLowerCase())||a.language.toLowerCase().includes(neDictSearch.toLowerCase())||(a.tribe||"").toLowerCase().includes(neDictSearch.toLowerCase())||(a.state||"").toLowerCase().includes(neDictSearch.toLowerCase())).map((a)=>c("div",{className:"p-4 rounded-xl border bg-white flex justify-between gap-4",children:[c("div",{children:[c("div",{className:"font-bold text-[#1a237e] text-[16px]",children:[a.word," ",c("span",{className:"text-gray-400 font-normal text-[12px]",children:["/",a.pronunciation,"/"]})]}),i("div",{className:"text-[14px] mt-1",children:a.meaning}),c("div",{className:"text-[12px] text-gray-500 mt-1",children:[a.language," • ",a.tribe," • ",a.state]}),c("div",{className:"text-[12px] text-gray-600 mt-2 italic",children:["Ex: ",a.example]}),(Ze||(neContributor&&a.contributor===neContributor.id))&&c("div",{className:"flex gap-2 mt-2",children:[i("button",{onClick:()=>{p({id:a.id,word:a.word,language:a.language,tribe:a.tribe,state:a.state,meaning:a.meaning,example:a.example,pronunciation:a.pronunciation,altSpelling:a.altSpelling,source:a.source,contributor:a.contributor,dateAdded:a.dateAdded}),f({type:"addWord"})},className:"text-[11px] px-3 py-1.5 rounded-full border ne-dgreen-border ne-dgreen-text font-semibold",children:"Edit"}),i("button",{onClick:async()=>{if(!confirm('Delete "'+a.word+'"? This cannot be undone.'))return;try{let token=l?localStorage.getItem("ne_auth_token"):(neContributor?neContributor.token:null);let res=await fetch("/api/d1/delete-dictionary",{method:"POST",headers:{"Content-Type":"application/json",...(token?{"Authorization":"Bearer "+token}:{})},credentials:"include",body:JSON.stringify({id:a.id})});let d=await res.json().catch(()=>({}));if(!res.ok||d.success===false){alert("Could not delete: "+(d.error||res.status));return}n((ye)=>({...ye,dict:ye.dict.filter((w)=>w.id!==a.id)}));}catch(err){alert("Network error \u2014 could not reach the server. Nothing was deleted.")}},className:"text-[11px] px-3 py-1.5 rounded-full border border-red-300 text-red-600 font-semibold",children:"Remove"})]}),neEngagementBlock("word",a.id,{downloadText:a.word+"\n\n"+a.meaning+(a.example?"\n\nExample: "+a.example:""),downloadName:(a.word||"word")+".txt",shareTitle:a.word,shareUrl:typeof window!=="undefined"?window.location.origin+"/?word="+a.id:""})]}),c("div",{className:"text-[10px] text-gray-400 text-right",children:["By ",a.isAnonymous?"Anonymous Contributor":(a.source||a.contributor),i("br",{}),new Date(a.dateAdded).toLocaleDateString(),
                 // Issue-1 correction pass: same Super-Admin-only reveal as
                 // Manage Articles. realAuthorName only ever arrives already
                 // verified SUPER_ADMIN server-side (neProjectContentRow).
@@ -4566,8 +4428,8 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
         ]}),
         neStudioTab==="DESIGN" && (()=>{
           const NE_DESIGN_SECTION_OPTIONS=[
-            {key:"hero",label:"Hero / Banner"},
-            {key:"quickActions",label:"Quick Action Buttons"},
+            {key:"hero",label:"Header / Banner"},
+            
             {key:"dailyNews",label:"Daily Northeast News"},
             {key:"quickCategories",label:"Quick Categories Grid"},
             {key:"featured",label:"Today's Featured"},
@@ -4673,9 +4535,9 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide",children:"Select Section"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Select one section and edit its settings. The selected section stays selected while you edit controls or switch to another section."}),
             c("select",{value:neDesignSelectedSection,onChange:(ev)=>setNeDesignSelectedSection(ev.target.value),className:"mt-2 w-full h-10 px-3 rounded-lg border text-[13px]",children:[
-              {key:"hero",label:"Hero / Banner"},{key:"quickActions",label:"Quick Action Buttons"},{key:"dailyNews",label:"Daily Northeast News"},{key:"quickCategories",label:"Quick Categories Grid"},{key:"featured",label:"Today's Featured"},{key:"exploreByTopic",label:"Explore by Topic"},{key:"allCategories",label:"All Categories"},{key:"footer",label:"Footer"}
+              {key:"hero",label:"Header / Banner"},{key:"dailyNews",label:"Daily Northeast News"},{key:"quickCategories",label:"Quick Categories Grid"},{key:"featured",label:"Today's Featured"},{key:"exploreByTopic",label:"Explore by Topic"},{key:"allCategories",label:"All Categories"},{key:"footer",label:"Footer"}
             ].map((opt)=>i("option",{key:opt.key,value:opt.key,children:opt.label}))}),
-            i("p",{className:"mt-2 text-[11px] text-gray-500",children:"Editing: "+(({hero:"Hero / Banner",quickActions:"Quick Action Buttons",dailyNews:"Daily Northeast News",quickCategories:"Quick Categories Grid",featured:"Today's Featured",exploreByTopic:"Explore by Topic",allCategories:"All Categories",footer:"Footer"})[neDesignSelectedSection]||neDesignSelectedSection)}),
+            i("p",{className:"mt-2 text-[11px] text-gray-500",children:"Editing: "+(({hero:"Header / Banner",quickActions:"Quick Action Buttons",dailyNews:"Daily Northeast News",quickCategories:"Quick Categories Grid",featured:"Today's Featured",exploreByTopic:"Explore by Topic",allCategories:"All Categories",footer:"Footer"})[neDesignSelectedSection]||neDesignSelectedSection)}),
             i("p",{className:"mt-2 text-[11px] text-gray-400",children:"Every control below changes ONLY the section selected above. No other section is touched. Choose None to reset that one control for this section."}),
 
             ...(neDesignSelectedSection!=="footer"?[
@@ -5186,7 +5048,7 @@ Founder: Ben Yanthan
 UPI: benjaminyanthan48-2@okaxis
 
 We respond to legitimate community and academic inquiries.`},{title:"Privacy Policy",content:"Privacy: We respect privacy. This demo uses localStorage only. Real deployment will use secure DB (Supabase/Firebase). No card numbers, CVV, UPI PIN stored. Donations via secure gateway (UPI). Donor private info not publicly displayed. No tracking beyond essential analytics."},{title:"Terms of Use",content:"Terms: Content free to read. Contributions must be your own or legally licensed. Provide creator, source, license for images. No defamation, no unverified claims as fact. Oral history distinguished from established history. Admins may moderate per Community Guidelines."},{title:"Copyright & Licensing",content:"Copyright: Contributors warrant they own content or have permission. For images store creator, source, license, attribution. Do not copy random Google Images or Wikipedia content without attribution. If licensed content imported, preserve license. Project defines its own licensing policy, contributor agreement required."},{title:"Donation Policy",content:"Donation Policy: Donations voluntary, no paywall. ONE blank amount field, no preset chips. Secure Indian gateway (UPI). After success show thank-you and transaction ID. Admin → Donations shows successful/failed/pending, date, amount, transaction ID. No private donor info public."},{title:"Editorial Policy",content:"Editorial: Prioritize reliable sources: Govt, universities, academic publications, museums, archives, reputable news, credible community sources. Human-reviewed factual content. AI may assist drafting/formatting but must not invent facts. Verification status shown. Sources cited."},{title:"Community Guidelines",content:"Community Guidelines: Be respectful, cite sources, distinguish oral history vs fact, no hate, no spam, protect privacy of living persons, avoid defamatory claims. Super Admin has final authority. Role-based permissions enforced."},{title:"Advertising Policy",content:"Advertising: OFF by default. Super Admin can turn ON/OFF. Ad slots: AD_TOP, AD_ARTICLE, AD_SIDEBAR, AD_MOBILE, AD_FOOTER. Clearly distinguished from editorial, no fake buttons, no deceptive advertising, no encouragement to click. Future Google AdSense ready."},{title:"Not Affiliated With Wikimedia",content:"Northeast Encyclopedia is an independent project and is not affiliated with or endorsed by Wikimedia Foundation or Wikipedia. We use term wiki-style encyclopedia. Original branding, logo, colors (#1a237e indigo + #ff6f00 saffron + #fefefe warm white), layout, code."}].map((a)=>i("button",{onClick:()=>f({type:"legal",data:a}),className:"block hover:underline text-left",children:a.title},a.title))})]})]}),i("div",{className:"border-t border-gray-100 py-6 px-4 md:px-6",children:c("div",{style:footerTextStyle,className:"max-w-[1280px] mx-auto flex flex-col md:flex-row justify-between gap-3 items-center"+(footerHasFontColor?"":" text-gray-500")+(footerHasFontSize?"":" text-[12px]"),children:[c("div",{children:["© ",new Date().getFullYear()," Northeast Encyclopedia • northeastencyclopedia.com • Independent Project"]}),i("div",{style:footerTextStyle,className:"text-center md:text-right font-medium"+(footerHasFontColor?"":" text-[#1a237e]"),children:"“Northeast Encyclopedia is an independent project and is not affiliated with or endorsed by Wikimedia Foundation or Wikipedia.”"})]})})]});
-})(),i("div",{className:"md:hidden fixed bottom-0 left-0 right-0 p-2 bg-white border-t border-gray-200 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] z-30",children:e.settings.adsEnabled?((neMA)=>neMA?c(neSafeAdLink(neMA.linkUrl)?"a":"div",{"data-ne-ad":neMA.id,...(neSafeAdLink(neMA.linkUrl)?{href:neSafeAdLink(neMA.linkUrl),target:"_blank",rel:"sponsored noopener noreferrer"}:{}),className:"flex items-center gap-2 text-[12px]",children:[neMA.imageUrl?i("img",{src:neMA.imageUrl,alt:"",style:{height:"32px",width:"auto",maxWidth:"64px",objectFit:"contain"}}):null,i("span",{className:"text-[10px] font-bold text-[#ff6f00]",children:"AD"}),i("span",{className:"flex-1 truncate",children:[neMA.title,neMA.title&&neMA.body?" — ":"",neMA.body].join("")})]}):c("div",{className:"text-[10px] text-center",children:[i("span",{className:"font-bold text-[#ff6f00]",children:"AD_MOBILE"})," • Support local business • Ad space"]}))(neDirectAdFor(e.settings,"AD_MOBILE")):c("div",{className:"flex justify-between items-center",children:[i("span",{className:"text-[12px] font-bold text-[#1a237e]",children:"Explore Northeast knowledge free"}),i("button",{onClick:()=>f({type:"donate"}),className:"h-8 px-4 rounded-full bg-[#ff6f00] text-white text-[12px] font-bold",children:"Support ♥"})]})}),i("div",{className:"h-[60px] md:hidden"}),neStudioPreviewDesign&&i("div",{className:"fixed inset-0 z-[70] bg-white overflow-y-auto",children:c("div",{className:"max-w-[1280px] mx-auto px-4 md:px-6 py-6 md:py-8",children:[
+})(),neBottomBar(),neStudioPreviewDesign&&i("div",{className:"fixed inset-0 z-[70] bg-white overflow-y-auto",children:c("div",{className:"max-w-[1280px] mx-auto px-4 md:px-6 py-6 md:py-8",children:[
   // Round 17 (2nd follow-up): both bg-[#6a1b9a] here AND text-[#6a1b9a] on
   // the close button below were NEVER compiled into this file's static
   // stylesheet either (confirmed: "6a1b9a" appears zero times anywhere in
