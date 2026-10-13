@@ -63,7 +63,8 @@ async function fetchAssetWithWrapperFallback(request, env) {
 // Requirements: No hardcoded fallback password usage when env exists, no silent user recreation on login, JWT same secret, ne_auth_token compatible
 
 const FALLBACK_SALT = "NE_SECURE_SALT_51780b3815759ff5_prod_v2";
-const FALLBACK_JWT = "NE_JWT_SUPER_SECURE_2024_BENYANTHAN_64CHARS_SECRET_KEY_FOR_SIGNING";
+// (Backup signing key removed: passes are only ever signed with the JWT_SECRET
+// set in Cloudflare. If it is missing, sign-in fails safely instead.)
 // NE CONTRIBUTOR V1 (test-project only) - Google OAuth Client ID is public by design, safe to embed
 const NE_CONTRIB_GOOGLE_CLIENT_ID = "917861607184-7s2ru1dnajfh8a0jare7ae54oa6evpcr.apps.googleusercontent.com";
 
@@ -79,7 +80,7 @@ function getJwtSecret(env){
     if(env.JWT_SECRET) return env.JWT_SECRET;
     if(env.JWT_SECRET_KEY) return env.JWT_SECRET_KEY;
   }
-  return FALLBACK_JWT;
+  return null;
 }
 function b64urlEncode(str){
   return btoa(str).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
@@ -110,6 +111,7 @@ async function pbkdf2Hash(password, salt){
 }
 
 async function signJWT(payload, secret){
+  if(!secret) throw new Error('JWT secret not configured');
   const header={alg:'HS256',typ:'JWT'};
   const h=b64urlEncode(JSON.stringify(header));
   const p=b64urlEncode(JSON.stringify(payload));
@@ -121,6 +123,7 @@ async function signJWT(payload, secret){
 
 async function verifyJWT(token, secret, env){
   try{
+    if(!secret || !token) return null;
     const parts=token.split('.');
     if(parts.length!==3) return null;
     const [h,p,s]=parts;
@@ -2021,7 +2024,7 @@ export default {
         role: 'CONTRIBUTOR',
         status: row.status,
         iat: Math.floor(Date.now()/1000),
-        exp: Math.floor(Date.now()/1000) + 7*24*3600
+        exp: Math.floor(Date.now()/1000) + 30*24*3600
       };
       const secret = getJwtSecret(env);
       const token = await signJWT(tokenPayload, secret);
@@ -2380,6 +2383,20 @@ export default {
       const actor = await neResolveActor(request, env);
       if(actor && actor.actorType==='contributor'){ userType='contributor'; contributorId=actor.actorId; }
       else if(actor && actor.actorType==='admin'){ userType='admin'; }
+      let renewedToken = null;
+      if(contributorId){
+        try{
+          const neSecret = getJwtSecret(env);
+          const neOld = await verifyJWT(getTokenFromRequest(request), neSecret, env);
+          const neNowS = Math.floor(Date.now()/1000);
+          if(neOld && neOld.role==='CONTRIBUTOR' && (!neOld.iat || neNowS-neOld.iat > 6*3600)){
+            const neRow = await d1.prepare("SELECT id,googleSub,displayName,status FROM contributors WHERE id=?").bind(contributorId).first();
+            if(neRow && neRow.status==='ACTIVE'){
+              renewedToken = await signJWT({contributorId:neRow.id, googleSub:neRow.googleSub, displayName:neRow.displayName, role:'CONTRIBUTOR', status:neRow.status, iat:neNowS, exp:neNowS+30*24*3600}, neSecret);
+            }
+          }
+        }catch(e){ renewedToken = null; }
+      }
 
       const now = new Date();
       const nowIso = now.toISOString();
@@ -2397,7 +2414,7 @@ export default {
       if(contributorId){
         try{ await d1.prepare("UPDATE contributors SET lastActiveAt=? WHERE id=? AND (lastActiveAt IS NULL OR lastActiveAt<?)").bind(nowIso, contributorId, new Date(now.getTime()-60000).toISOString()).run(); }catch(e){}
       }
-      return jsonResponse({success:true});
+      return jsonResponse(renewedToken ? {success:true, token:renewedToken, tokenFor:'contributor'} : {success:true});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
 
