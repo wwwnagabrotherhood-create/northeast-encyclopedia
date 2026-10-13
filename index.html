@@ -2756,9 +2756,9 @@ const neTitleStyle=(key)=>{
 // (formerly "Header / Banner") Size + Font Size + Font Colour + Donate Colour
 // controls now drive the header, and "Header Title" (formerly "Header Logo")
 // still controls the title font -- so no new server-side setting is needed.
-const neHdr=(()=>{
+const neHdrFor=(neSet,neIsHome)=>{
   let vis=null,raw={},enabled=true;
-  try{const d=neGetPublicHomeDesign(e.settings.publicHomeDesign);vis=neSectionVisualDesign(d,"hero");raw=(d&&d.sectionVisuals&&d.sectionVisuals.hero)||{};enabled=neHomeSectionEnabled(d,"hero");}catch(err){}
+  try{const d=neGetPublicHomeDesign(neSet&&neSet.publicHomeDesign);vis=neSectionVisualDesign(d,"hero");raw=(d&&d.sectionVisuals&&d.sectionVisuals.hero)||{};enabled=neHomeSectionEnabled(d,"hero");}catch(err){}
   const PAD={smaller:4,standard:12,medium:18,large:26};
   let pad=12,minH=0;
   if(typeof raw.boxTallPx==="number"&&raw.boxTallPx>=24&&raw.boxTallPx<=800) minH=Math.min(220,raw.boxTallPx);
@@ -2772,7 +2772,7 @@ const neHdr=(()=>{
   else if(vis&&!vis.sectionFontSize&&typeof vis.categorySize==="string"&&SIZE_TO_TXT[vis.categorySize]) fs=TXT[SIZE_TO_TXT[vis.categorySize]];
   let fc={},fx={},dbs={};
   try{fc=neSectionFontColorStyle(vis)||{};fx=neSectionFontExtraStyle(vis)||{};dbs=neSectionColorStyle({sectionColor:raw.donateColor,sectionColorCustom:raw.donateColorCustom})||{};}catch(err){}
-  const showSub=enabled&&o.type==="home";
+  const showSub=enabled&&neIsHome;
   // Background colour: header turns that colour; on a dark colour the title,
   // menu icon and contribute text switch to white so they stay readable.
   let bg=null,dark=false;
@@ -2780,7 +2780,21 @@ const neHdr=(()=>{
   const subColor=(!fc.color&&dark)?{color:"rgba(255,255,255,.9)"}:{};
   return {pad,minH,showSub,hdrBg:bg,hdrDark:dark,textStyle:{fontSize:fs+"px",...fc,...subColor,...fx},textHasColor:!!fc.color||dark,
     donateStyle:dbs.backgroundColor?{backgroundColor:dbs.backgroundColor,color:"#14532d"}:{},donateHasColor:!!dbs.backgroundColor};
-})();
+};
+const neHdr=neHdrFor(e.settings,o.type==="home");
+// Read-only copy of the header for the admin Design preview (nothing clickable).
+const neHeaderPreview=(neSet)=>{
+  const hp=neHdrFor(neSet,!0);
+  let ts={style:{},hasColor:!1};
+  try{const tv=neSectionVisualDesign(neGetPublicHomeDesign(neSet&&neSet.publicHomeDesign),"headerLogo");const tc=neSectionFontColorStyle(tv)||{};ts={style:{...tc,...(neTitleFontSizeStyle(tv)||{}),...(neSectionFontExtraStyle(tv)||{})},hasColor:!!tc.color};}catch(err){}
+  return c("div",{"data-ne-header-preview":"1",className:(hp.hdrBg?"":"bg-white ")+"border-b ne-dgreen-border-10",style:{marginBottom:"16px",...(hp.hdrBg?{backgroundColor:hp.hdrBg}:{}),...(hp.showSub&&hp.minH?{minHeight:hp.minH+"px",display:"flex",flexDirection:"column",justifyContent:"center"}:{})},children:[
+    c("div",{className:"px-4 flex items-center justify-between gap-3",style:{width:"100%",paddingTop:hp.pad+"px",paddingBottom:(hp.showSub?Math.max(2,Math.round(hp.pad/3)):hp.pad)+"px"},children:[
+      c("div",{className:"flex items-center gap-3 min-w-0",children:[
+        i("span",{className:"p-1 shrink-0",style:hp.hdrDark?{color:"#fff"}:void 0,children:i(Zr,{size:26,className:hp.hdrDark?"":"ne-dgreen-text"})}),
+        i("span",{className:"font-[Fraunces] font-bold text-[20px] truncate "+(ts.hasColor?"":(hp.hdrDark?"":"ne-dgreen-text")),style:{...(hp.hdrDark&&!ts.hasColor?{color:"#fff"}:{}),...ts.style},children:"NE Encyclopedia"})]}),
+      c("div",{className:"flex items-center gap-4 shrink-0",children:[i("span",{className:"text-[24px] leading-none",children:"\ud83d\udca1"}),i("span",{className:"w-9 h-9 rounded-[10px] ne-profile-placeholder shrink-0",style:{display:"inline-block"}})]})]}),
+    hp.showSub&&i("div",{className:"px-4",style:{width:"100%",paddingBottom:Math.max(6,hp.pad)+"px"},children:i("p",{style:hp.textStyle,className:"leading-snug "+(hp.textHasColor?"":"text-gray-600"),children:"Anyone can contribute by signing in with a Gmail account. Share your articles, history, local dialects, cultures, traditions, and knowledge from your community, and help preserve the rich heritage of Northeast India."})})]});
+};
 const neWriteArticle=()=>{if(!Qt&&!neContributor){neCreateAccountPrompt("Writing an Article");return}p({}),f({type:"editArticle"}),h("edit")};
 const neAddWord=()=>{if(!Qt&&!neContributor){neCreateAccountPrompt("Adding a Dictionary Word");return}p({}),f({type:"addWord"})};
 const NE_NAV_ITEMS={
@@ -5077,6 +5091,7 @@ We respond to legitimate community and academic inquiries.`},{title:"Privacy Pol
     c("div",{className:"flex items-center gap-2 text-[13px] font-bold",children:[i(el,{size:16}),"Previewing: "+neStudioPreviewName+" (not live — nothing is saved or uploaded by viewing this)"]}),
     i("button",{onClick:neCloseDesignPreview,title:"Close preview",style:{color:"#6a1b9a"},className:"p-2 rounded-full bg-white shrink-0",children:i($n,{size:18})})
   ]}),
+  neHeaderPreview({...e.settings,publicHomeDesign:neStudioPreviewDesign}),
   neRenderHomeContent({...e,settings:{...e.settings,publicHomeDesign:neStudioPreviewDesign}})
 ]})})]})}Zd.createRoot(document.getElementById("root")).render(i(Xd.default.StrictMode,{children:i(qi,{})}));
 </script>
