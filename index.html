@@ -269,7 +269,7 @@ It is maintained by Archaeological Survey of India.`,categories:["History","Trip
   };
   reader.readAsDataURL(file);
 }
-function qi(){let[e,n]=G.useState(M1),[t,r]=G.useState(!1),[neContributor,setNeContributor]=G.useState(()=>{try{const raw=localStorage.getItem("ne_contributor");return raw?JSON.parse(raw):null}catch{return null}}),[neMedia,setNeMedia]=G.useState([]),[neMediaForm,setNeMediaForm]=G.useState({}),[neCategories,setNeCategories]=G.useState([]),[neCategoriesLoaded,setNeCategoriesLoaded]=G.useState(!1),[neCatSearch,setNeCatSearch]=G.useState(""),[neQuickCatStudioSearch,setNeQuickCatStudioSearch]=G.useState(""),[neStudioLibrarySearch,setNeStudioLibrarySearch]=G.useState(""),[neEngagementData,setNeEngagementData]=G.useState({}),[neVisitorId]=G.useState(()=>{try{let v=localStorage.getItem("ne_visitor_id");if(!v){v="v"+Date.now().toString(36)+Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10);localStorage.setItem("ne_visitor_id",v)}return v}catch{return "v"+Date.now().toString(36)}}),[neLiveStats,setNeLiveStats]=G.useState(null),[neStudioSelectedSection,setNeStudioSelectedSection]=G.useState("quickCategories"),[neContributorsList,setNeContributorsList]=G.useState([]),[neAdsAdmin,setNeAdsAdmin]=G.useState(null),[neAdForm,setNeAdForm]=G.useState(null),[neAdNetForm,setNeAdNetForm]=G.useState(null),[neAdMsg,setNeAdMsg]=G.useState(""),[neAdNote,setNeAdNote]=G.useState(null),[neAdBusy,setNeAdBusy]=G.useState(""),[neAdLayoutForm,setNeAdLayoutForm]=G.useState(null),[neContributorSearch,setNeContributorSearch]=G.useState(""),[neContributorDetail,setNeContributorDetail]=G.useState(null),[neDictSearch,setNeDictSearch]=G.useState(""),[neStorySearch,setNeStorySearch]=G.useState(""),[neGallerySearch,setNeGallerySearch]=G.useState(""),[neLiveContributorCount,setNeLiveContributorCount]=G.useState(null),[l,u]=G.useState(null),[o,f]=G.useState({type:"home"}),[d,y]=G.useState(""),[m,g]=G.useState(()=>{try{return new URLSearchParams(window.location.search).get("neadmin")==="1"}catch(e){return!1}}),[v,E]=G.useState({username:"",password:""}),[w,P]=G.useState(!1),[B,h]=G.useState("article"),[s,p]=G.useState({}),[k,z]=G.useState(""),[le2Val,le2]=G.useState(!1),[T,O]=G.useState("idle"),[R,A]=G.useState(""),[M,V]=G.useState(null),[I,le]=G.useState({}),[neFontSize,setNeFontSize]=G.useState(()=>{try{return localStorage.getItem("ne_font_size")||"Standard"}catch{return "Standard"}}),[neSuggestions,setNeSuggestions]=G.useState([]),[neSuggestUnread,setNeSuggestUnread]=G.useState(0),[neCategoriesData,setNeCategoriesData]=G.useState([]),[neCategoryForm,setNeCategoryForm]=G.useState({}),[neCategoryAdminSearch,setNeCategoryAdminSearch]=G.useState(""),[neCatContentSearch,setNeCatContentSearch]=G.useState(""),[neCategoryPageSearch,setNeCategoryPageSearch]=G.useState(""),[neStatePageSearch,setNeStatePageSearch]=G.useState(""),[neMySubmissions,setNeMySubmissions]=G.useState([]),[neColorMode,setNeColorMode]=G.useState(()=>{try{return localStorage.getItem("ne_color_mode")||"White"}catch{return "White"}}),[neNavOrder,setNeNavOrder]=G.useState(()=>{const def=["home","search","write","dictionary"];try{const v=JSON.parse(localStorage.getItem("ne_bottom_nav_order")||"null");if(Array.isArray(v)&&v.length===def.length&&def.every((k)=>v.includes(k)))return v}catch{}return def}),[neNavArrangeOpen,setNeNavArrangeOpen]=G.useState(!1),[neNavIconSize,setNeNavIconSize]=G.useState(()=>{try{const v=localStorage.getItem("ne_bottom_icon_size");return v==="Small"||v==="Large"?v:"Medium"}catch{return "Medium"}}),[neNavIconPanelOpen,setNeNavIconPanelOpen]=G.useState(!1),[neSigninExpired,setNeSigninExpired]=G.useState(!1),[neContribListStatus,setNeContribListStatus]=G.useState({loading:!1,at:0,error:""}),[neSearchOpen,setNeSearchOpen]=G.useState(!1),[neShowSuggest,setNeShowSuggest]=G.useState(!1),[neSuggestText,setNeSuggestText]=G.useState(""),[neSettingsOpen,setNeSettingsOpen]=G.useState(!1),[neFontPanelOpen,setNeFontPanelOpen]=G.useState(!1),[neColourPanelOpen,setNeColourPanelOpen]=G.useState(!1),
+function qi(){let[e,n]=G.useState(M1),[t,r]=G.useState(!1),[neContributor,setNeContributor]=G.useState(()=>{try{const raw=localStorage.getItem("ne_contributor");return raw?JSON.parse(raw):null}catch{return null}}),[neMedia,setNeMedia]=G.useState([]),[neMediaForm,setNeMediaForm]=G.useState({}),[neCategories,setNeCategories]=G.useState([]),[neCategoriesLoaded,setNeCategoriesLoaded]=G.useState(!1),[neCatSearch,setNeCatSearch]=G.useState(""),[neQuickCatStudioSearch,setNeQuickCatStudioSearch]=G.useState(""),[neStudioLibrarySearch,setNeStudioLibrarySearch]=G.useState(""),[neEngagementData,setNeEngagementData]=G.useState({}),[neVisitorId]=G.useState(()=>{try{let v=localStorage.getItem("ne_visitor_id");if(!v){v="v"+Date.now().toString(36)+Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10);localStorage.setItem("ne_visitor_id",v)}return v}catch{return "v"+Date.now().toString(36)}}),[neLiveStats,setNeLiveStats]=G.useState(null),[neStudioSelectedSection,setNeStudioSelectedSection]=G.useState("quickCategories"),[neContributorsList,setNeContributorsList]=G.useState([]),[neAdsAdmin,setNeAdsAdmin]=G.useState(null),[neAdForm,setNeAdForm]=G.useState(null),[neAdNetForm,setNeAdNetForm]=G.useState(null),[neAdMsg,setNeAdMsg]=G.useState(""),[neAdNote,setNeAdNote]=G.useState(null),[neAdBusy,setNeAdBusy]=G.useState(""),[neAdLayoutForm,setNeAdLayoutForm]=G.useState(null),[neContributorSearch,setNeContributorSearch]=G.useState(""),[neContributorDetail,setNeContributorDetail]=G.useState(null),[neDictSearch,setNeDictSearch]=G.useState(""),[neStorySearch,setNeStorySearch]=G.useState(""),[neGallerySearch,setNeGallerySearch]=G.useState(""),[neLiveContributorCount,setNeLiveContributorCount]=G.useState(null),[l,u]=G.useState(null),[o,f]=G.useState({type:"home"}),[d,y]=G.useState(""),[m,g]=G.useState(()=>{try{return new URLSearchParams(window.location.search).get("neadmin")==="1"}catch(e){return!1}}),[v,E]=G.useState({username:"",password:""}),[w,P]=G.useState(!1),[B,h]=G.useState("article"),[s,p]=G.useState({}),[k,z]=G.useState(""),[le2Val,le2]=G.useState(!1),[T,O]=G.useState("idle"),[R,A]=G.useState(""),[M,V]=G.useState(null),[I,le]=G.useState({}),[neFontSize,setNeFontSize]=G.useState(()=>{try{return localStorage.getItem("ne_font_size")||"Standard"}catch{return "Standard"}}),[neSuggestions,setNeSuggestions]=G.useState([]),[neSuggestUnread,setNeSuggestUnread]=G.useState(0),[neCategoriesData,setNeCategoriesData]=G.useState([]),[neCategoryForm,setNeCategoryForm]=G.useState({}),[neCategoryAdminSearch,setNeCategoryAdminSearch]=G.useState(""),[neCatContentSearch,setNeCatContentSearch]=G.useState(""),[neCategoryPageSearch,setNeCategoryPageSearch]=G.useState(""),[neStatePageSearch,setNeStatePageSearch]=G.useState(""),[neMySubmissions,setNeMySubmissions]=G.useState([]),[neColorMode,setNeColorMode]=G.useState(()=>{try{return localStorage.getItem("ne_color_mode")||"White"}catch{return "White"}}),[neNavOrder,setNeNavOrder]=G.useState(()=>{const def=["home","search","write","dictionary"];try{const v=JSON.parse(localStorage.getItem("ne_bottom_nav_order")||"null");if(Array.isArray(v)&&v.length===def.length&&def.every((k)=>v.includes(k)))return v}catch{}return def}),[neNavArrangeOpen,setNeNavArrangeOpen]=G.useState(!1),[neNavIconSize,setNeNavIconSize]=G.useState(()=>{try{const v=localStorage.getItem("ne_bottom_icon_size");return v==="Small"||v==="Large"?v:"Medium"}catch{return "Medium"}}),[neNavIconPanelOpen,setNeNavIconPanelOpen]=G.useState(!1),[neSigninExpired,setNeSigninExpired]=G.useState(!1),[neContribListStatus,setNeContribListStatus]=G.useState({loading:!1,at:0,error:""}),[neLiveStatus,setNeLiveStatus]=G.useState({loading:!1,at:0,error:""}),[neSearchOpen,setNeSearchOpen]=G.useState(!1),[neShowSuggest,setNeShowSuggest]=G.useState(!1),[neSuggestText,setNeSuggestText]=G.useState(""),[neSettingsOpen,setNeSettingsOpen]=G.useState(!1),[neFontPanelOpen,setNeFontPanelOpen]=G.useState(!1),[neColourPanelOpen,setNeColourPanelOpen]=G.useState(!1),
 // NE STUDIO STAGE 1: SUPER_ADMIN-only Studio shell state. neStudioConfig is
 // D1-backed (read via /api/admin/settings, written via /api/admin/settings/save
 // under the single key "studioConfig") — never persisted to localStorage.
@@ -613,17 +613,31 @@ G.useEffect(()=>{
 },[]);
 // Live Status panel data, Super Admin only — same gating pattern as the
 // existing neLiveContributorCount fetch.
+const neLoadLiveStats=async()=>{
+  setNeLiveStatus((s0)=>({...s0,loading:!0}));
+  try{
+    let token=localStorage.getItem("ne_auth_token");
+    let res=await fetch("/api/admin/live-stats",{headers:{...(token?{"Authorization":"Bearer "+token}:{})},credentials:"include"});
+    let d=await res.json().catch(()=>({}));
+    if(d&&d.success){ setNeLiveStats(d.stats); setNeLiveStatus({loading:!1,at:Date.now(),error:""}); }
+    else setNeLiveStatus((s0)=>({...s0,loading:!1,error:(d&&d.error)||("Server error "+res.status)}));
+  }catch(e){ setNeLiveStatus((s0)=>({...s0,loading:!1,error:"Network error \u2014 could not reach the server."})); }
+};
 G.useEffect(()=>{
   if(!l||l.role!=="SUPER_ADMIN"){ setNeLiveStats(null); return; }
-  (async()=>{
-    try{
-      let token=localStorage.getItem("ne_auth_token");
-      let res=await fetch("/api/admin/live-stats",{headers:{...(token?{"Authorization":"Bearer "+token}:{})},credentials:"include"});
-      let d=await res.json().catch(()=>({}));
-      if(d&&d.success) setNeLiveStats(d.stats);
-    }catch(e){}
-  })();
+  neLoadLiveStats();
 },[l]);
+// Live Status: fresh numbers the moment the panel opens, then every 10 seconds
+// while it stays open and the tab is visible (same pattern as Contributors).
+G.useEffect(()=>{
+  if(!l||l.role!=="SUPER_ADMIN") return;
+  if(!(M&&M.type==="liveStatus")) return;
+  neLoadLiveStats();
+  const neLt=setInterval(()=>{ if(document.visibilityState==="visible") neLoadLiveStats(); },10000);
+  const neLv=()=>{ if(document.visibilityState==="visible") neLoadLiveStats(); };
+  document.addEventListener("visibilitychange",neLv);
+  return ()=>{ clearInterval(neLt); document.removeEventListener("visibilitychange",neLv); };
+},[l,M&&M.type]);
 // ---- Online-sync additions (LIVE audit) ----------------------------------
 // neDataNonce: bumping it re-reads articles + all-data from D1 (Super Admin
 // dashboard navigation), so dashboard lists never show stale data.
@@ -4122,6 +4136,10 @@ M.type==="restricted"&&c("div",{className:"mt-4 space-y-3",children:[
   })()
 ]}),
 M.type==="liveStatus"&&c("div",{className:"mt-4",children:[
+  c("div",{className:"flex items-center gap-2",style:{marginBottom:"8px"},children:[
+    neLiveStatus.error?i("div",{"data-ne-live-error":"1",className:"flex-1 text-[12px] font-semibold",style:{color:"#c62828"},children:"Could not refresh: "+neLiveStatus.error}):i("div",{"data-ne-live-updated":"1",className:"flex-1 text-[11px] text-gray-400",children:(neLiveStatus.at?"Updated at "+new Date(neLiveStatus.at).toLocaleTimeString()+" \u2022 ":"")+"Updates automatically every 10 seconds while this screen is open."}),
+    i("button",{"data-ne-live-refresh":"1",onClick:()=>neLoadLiveStats(),disabled:neLiveStatus.loading,className:"h-10 px-4 rounded-xl border-2 border-gray-200 text-[12px] font-bold shrink-0",children:neLiveStatus.loading?"Refreshing\u2026":"Refresh"})
+  ]}),
   i("h4",{className:"font-bold text-sm text-[#1a237e]",children:"Users (Visitors + Contributors) — Live, Server-Tracked"}),
   c("div",{className:"mt-2 grid grid-cols-2 md:grid-cols-4 gap-2",children:[
     {icon:"🟢",label:"Users Online Now",val:neLiveStats?neLiveStats.onlineNow:"…"},
@@ -4137,12 +4155,12 @@ M.type==="liveStatus"&&c("div",{className:"mt-4",children:[
   ]}))}),
   i("h4",{className:"mt-6 font-bold text-sm text-[#1a237e]",children:"Content"}),
   c("div",{className:"mt-2 grid grid-cols-2 md:grid-cols-4 gap-2",children:[
-    {icon:"👥",label:"Total Contributors",val:neLiveContributorCount===null?"…":neLiveContributorCount},
-    {icon:"📚",label:"Articles",val:e.articles.length},
-    {icon:"📖",label:"Dictionary Words",val:e.dict.length},
-    {icon:"📝",label:"Stories",val:e.stories.length},
-    {icon:"🏹",label:"Tribes & Communities",val:e.tribes.length},
-    {icon:"🖼️",label:"Photos",val:neMedia.length}
+    {icon:"👥",label:"Total Contributors",val:(neLiveStats&&neLiveStats.content&&typeof neLiveStats.content.contributors==="number")?neLiveStats.content.contributors:(neLiveContributorCount===null?"…":neLiveContributorCount)},
+    {icon:"📚",label:"Articles",val:(neLiveStats&&neLiveStats.content&&typeof neLiveStats.content.articles==="number")?neLiveStats.content.articles:e.articles.length},
+    {icon:"📖",label:"Dictionary Words",val:(neLiveStats&&neLiveStats.content&&typeof neLiveStats.content.dictionary==="number")?neLiveStats.content.dictionary:e.dict.length},
+    {icon:"📝",label:"Stories",val:(neLiveStats&&neLiveStats.content&&typeof neLiveStats.content.stories==="number")?neLiveStats.content.stories:e.stories.length},
+    {icon:"🏹",label:"Tribes & Communities",val:(neLiveStats&&neLiveStats.content&&typeof neLiveStats.content.tribes==="number")?neLiveStats.content.tribes:e.tribes.length},
+    {icon:"🖼️",label:"Photos",val:(neLiveStats&&neLiveStats.content&&typeof neLiveStats.content.media==="number")?neLiveStats.content.media:neMedia.length}
   ].map((st)=>c("div",{key:st.label,className:"p-3 rounded-xl bg-gray-50 border border-gray-100 text-center",title:st.note||"",children:[
     i("div",{className:"text-[18px]",children:st.icon}),
     i("div",{className:"text-[18px] font-bold text-[#1a237e]",children:st.val}),
