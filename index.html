@@ -157,6 +157,12 @@
       steps = "<b>1.</b> Tap <b>⋮</b> or <b>…</b> at the top<br><b>2.</b> Choose <b>“Open in Chrome”</b>" + (isIOS ? " or <b>“Open in Safari”</b>" : " or <b>“Open in browser”</b>") + "<br><b>3.</b> Tap <b>Install App</b> there";
     }else if(kind === "installed"){
       title = "You're using the app ✓"; sub = "Northeast Encyclopedia is already installed on this phone";
+    }else if(kind === "offer"){
+      title = "Install the NE Encyclopedia app"; sub = "Free · opens full screen, like an app";
+      steps = "New articles, stories, words and photos — one tap from your home screen.";
+    }else if(kind === "ios-alerts"){
+      title = "Alerts on iPhone"; sub = "iPhone shows alerts only from the installed app";
+      steps = "<b>1.</b> Tap the <b>Share</b> button " + share + "<br><b>2.</b> Tap <b>“Add to Home Screen”</b><br><b>3.</b> Open the app from your home screen and turn on <b>alerts</b> in the menu ☰";
     }else if(kind === "firefox"){
       title = "Install the app"; sub = "Two quick taps";
       steps = "<b>1.</b> Tap <b>⋮</b> (menu)<br><b>2.</b> Tap <b>“Install”</b> or <b>“Add to Home screen”</b>";
@@ -170,9 +176,9 @@
       '<div style="display:flex;align-items:center;gap:12px"><div style="width:48px;height:48px;border-radius:11px;overflow:hidden;border:1px solid #e5e7eb;flex:0 0 auto">' + ICON + '</div>' +
       '<div><div style="font-weight:800;font-size:17px;color:#14532d">' + title + '</div><div style="font-size:12px;color:#6b7280">' + sub + '</div></div></div>' +
       (steps ? '<div style="margin-top:16px;font-size:15px;line-height:1.9;color:#1f2937">' + steps + '</div>' : '') +
-      '<button type="button" data-ne-install-ok="1" style="margin-top:16px;width:100%;height:46px;border-radius:999px;border:0;background:#14532d;color:#fff;font-weight:700;font-size:15px;cursor:pointer">OK</button></div>';
+      '<button type="button" data-ne-install-ok="1" style="margin-top:16px;width:100%;height:46px;border-radius:999px;border:0;background:#14532d;color:#fff;font-weight:700;font-size:15px;cursor:pointer">' + (kind === "offer" ? "Install now" : "OK") + '</button></div>';
     o.onclick = function(ev){ if(ev.target === o) o.remove(); };
-    o.querySelector("[data-ne-install-ok]").onclick = function(){ o.remove(); };
+    o.querySelector("[data-ne-install-ok]").onclick = function(){ o.remove(); if(kind === "offer") window.neInstallApp("notify"); };
     document.body.appendChild(o);
   }
 
@@ -200,6 +206,144 @@
     else if(isFirefox && isAndroid) maybeShowBar("firefox");
   }
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
+
+  // ===== App installs + new-upload alerts (added) =====
+  // - Counts each phone/computer once when the app is installed or opened as
+  //   an installed app (Super Admin > Live Status > App Installs).
+  // - window.neAlerts: turns new-upload alerts on/off. Visitors are asked
+  //   once (small card at the bottom); after "Allow" they get an alert for
+  //   every new article, story, word, photo, tribe, person or place until
+  //   they switch it off in the menu.
+  // Back-button marker for the page scroll memory (must run before the app's own listener).
+  window.__nePopSeq = 0;
+  window.addEventListener("popstate", function(){ window.__nePopSeq++; });
+  function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+  function lsSet(k, v){ try{ if(v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); }catch(e){} }
+  function neVid(){
+    var v = lsGet("ne_visitor_id");
+    if(!v){ v = "v" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10); lsSet("ne_visitor_id", v); }
+    return v || "";
+  }
+  function platformName(){ return isAndroid ? "android" : isIOS ? "ios" : isPhone() ? "other" : "desktop"; }
+  function reportInstall(how){
+    if(lsGet("ne_install_reported") === "1") return;
+    var vid = neVid(); if(!vid) return;
+    fetch("/api/track/installed", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ vid: vid, how: how, platform: platformName() }) })
+      .then(function(r){ if(r.ok) lsSet("ne_install_reported", "1"); }).catch(function(){});
+  }
+  window.addEventListener("appinstalled", function(){ reportInstall("installed"); });
+
+  function toast(msg){
+    if(!document.body) return;
+    var old = document.getElementById("ne-alert-toast"); if(old) old.remove();
+    var t = el("div", "position:fixed;left:50%;transform:translateX(-50%);top:72px;z-index:100001;background:#14532d;color:#fff;padding:11px 16px;border-radius:12px;font-size:13.5px;line-height:1.35;box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:88vw;text-align:center", msg);
+    t.id = "ne-alert-toast"; document.body.appendChild(t);
+    setTimeout(function(){ if(t.parentNode) t.remove(); }, 4200);
+  }
+  var NA_OFF = "ne_alerts_off", NA_LATER = "ne_alerts_later", NA_SYNC = "ne_alerts_sync";
+  var pushOK = ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window);
+  function b64ToBytes(s){ s = s.replace(/-/g, "+").replace(/_/g, "/"); while(s.length % 4) s += "="; var b = atob(s), a = new Uint8Array(b.length); for(var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return a; }
+  function swReady(){ return navigator.serviceWorker.register("/sw.js").then(function(){ return navigator.serviceWorker.ready; }); }
+  function fireChange(){ try{ window.dispatchEvent(new Event("ne-alerts-change")); }catch(e){} }
+  function subscribe(){
+    return swReady().then(function(reg){
+      return fetch("/api/push/key", { cache: "no-store" }).then(function(r){ return r.json(); }).then(function(k){
+        if(!k || !k.publicKey) throw new Error("no key");
+        var want = b64ToBytes(k.publicKey);
+        return reg.pushManager.getSubscription().then(function(old){
+          if(!old) return {};
+          var cur = null; try{ cur = old.options && old.options.applicationServerKey ? new Uint8Array(old.options.applicationServerKey) : null; }catch(e){}
+          var same = cur && cur.length === want.length && Array.prototype.every.call(cur, function(x, i){ return x === want[i]; });
+          if(same) return { sub: old };
+          return old.unsubscribe().then(function(){ return { oldEndpoint: old.endpoint }; }, function(){ return { oldEndpoint: old.endpoint }; });
+        }).then(function(st){
+          if(st.sub) return st;
+          return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: want }).then(function(s){ return { sub: s, oldEndpoint: st.oldEndpoint }; });
+        });
+      }).then(function(x){
+        return fetch("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: x.sub.toJSON(), vid: neVid(), oldEndpoint: x.oldEndpoint || null }) })
+          .then(function(r){ if(!r.ok) throw new Error("not saved"); lsSet(NA_SYNC, String(Date.now())); return true; });
+      });
+    });
+  }
+  function unsubscribe(){
+    if(!pushOK) return Promise.resolve();
+    return navigator.serviceWorker.getRegistration().then(function(reg){
+      if(!reg) return;
+      return reg.pushManager.getSubscription().then(function(s){
+        if(!s) return;
+        return fetch("/api/push/unsubscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: s.endpoint }) }).catch(function(){})
+          .then(function(){ return s.unsubscribe(); });
+      });
+    }).catch(function(){});
+  }
+  window.neAlerts = {
+    state: function(){
+      if(!pushOK) return (isIOS && !isStandalone()) ? "ios-install" : "unsupported";
+      if(lsGet(NA_OFF) === "1") return "off";
+      if(Notification.permission === "denied") return "blocked";
+      return Notification.permission === "granted" ? "on" : "off";
+    },
+    enable: function(){
+      lsSet(NA_OFF, null); hidePrompt();
+      if(!pushOK){
+        if(isIOS && !isStandalone()) sheet("ios-alerts"); else toast("This browser can't show alerts. Please open the site in Chrome.");
+        fireChange(); return Promise.resolve(false);
+      }
+      return Promise.resolve(Notification.requestPermission()).then(function(p){
+        if(p !== "granted"){ toast(p === "denied" ? "Alerts are blocked. Allow notifications for this site in your browser settings." : "Alerts were not turned on."); fireChange(); return false; }
+        return subscribe().then(function(){ toast("🔔 Alerts are ON. We'll tell you whenever something new is added."); fireChange(); return true; });
+      }).catch(function(){ toast("Could not turn on alerts. Please try again."); fireChange(); return false; });
+    },
+    disable: function(){
+      lsSet(NA_OFF, "1"); hidePrompt();
+      return unsubscribe().then(function(){ toast("🔕 Alerts are OFF. Turn them on again any time from the menu ☰"); fireChange(); });
+    }
+  };
+
+  // Small "Get alerts" card, asked once; "✕" asks again after 3 days.
+  function hidePrompt(){ var p = document.getElementById("ne-alert-prompt"); if(p) p.remove(); }
+  function showPrompt(){
+    if(document.getElementById("ne-alert-prompt") || !document.body) return;
+    if(!pushOK || Notification.permission !== "default" || lsGet(NA_OFF) === "1") return;
+    var later = Number(lsGet(NA_LATER) || 0);
+    if(later && Date.now() - later < 3 * 86400000) return;
+    var bar = el("div", "position:fixed;left:10px;right:10px;z-index:46;background:#ffffff;border:1px solid #d9e5dc;border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.18);display:flex;align-items:center;gap:10px;padding:10px 8px 10px 12px;font-family:inherit;max-width:520px;margin:0 auto");
+    bar.id = "ne-alert-prompt"; bar.setAttribute("role", "dialog"); bar.setAttribute("aria-label", "Get alerts for new uploads");
+    bar.innerHTML =
+      '<div style="width:42px;height:42px;border-radius:10px;flex:0 0 auto;background:#14532d;color:#fff;display:flex;align-items:center;justify-content:center;font-size:21px">🔔</div>' +
+      '<div style="flex:1;min-width:0;text-align:left"><div style="font-weight:700;font-size:14px;line-height:1.25;color:#14532d">Get alerts for new uploads</div>' +
+      '<div style="font-size:11.5px;line-height:1.3;color:#6b7280">New articles, stories, words &amp; photos</div></div>' +
+      '<button type="button" data-ne-alert-allow="1" style="flex:0 0 auto;background:#14532d;color:#fff;border:0;border-radius:999px;height:36px;padding:0 16px;font-weight:700;font-size:13px;cursor:pointer">Allow</button>' +
+      '<button type="button" data-ne-alert-later="1" aria-label="Not now" style="flex:0 0 auto;background:none;border:0;font-size:18px;line-height:1;color:#9ca3af;width:32px;height:36px;cursor:pointer">✕</button>';
+    bar.querySelector("[data-ne-alert-allow]").onclick = function(){ window.neAlerts.enable(); };
+    bar.querySelector("[data-ne-alert-later]").onclick = function(){ lsSet(NA_LATER, String(Date.now())); hidePrompt(); };
+    document.body.appendChild(bar);
+    var place = function(){ if(bar.parentNode) bar.style.bottom = bottomOffset(bar) + "px"; };
+    place(); setTimeout(place, 600); setTimeout(place, 2500); window.addEventListener("resize", place);
+  }
+
+  function alertsStart(){
+    var q = null; try{ q = new URLSearchParams(location.search); }catch(e){}
+    // Opened from an alert's "Install app" button.
+    if(q && q.get("install") === "1"){
+      try{ q.delete("install"); history.replaceState(history.state, "", location.pathname + (q.toString() ? "?" + q.toString() : "") + location.hash); }catch(e){}
+      if(!isStandalone()) setTimeout(function(){ sheet("offer"); }, 1500);
+    }
+    if(isStandalone()){
+      reportInstall("opened");
+      if(pushOK) navigator.serviceWorker.ready.then(function(reg){ if(reg.active) reg.active.postMessage({ neStandalone: true }); }).catch(function(){});
+    }
+    if(!pushOK) return;
+    // Already allowed: keep this phone on the list (checked once a day).
+    if(Notification.permission === "granted" && lsGet(NA_OFF) !== "1"){
+      var last = Number(lsGet(NA_SYNC) || 0);
+      if(!last || Date.now() - last > 86400000) subscribe().catch(function(){});
+    }
+    setTimeout(showPrompt, 8000);
+  }
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", alertsStart); else alertsStart();
+  // ===== end app installs + alerts =====
 
   if("serviceWorker" in navigator){
     window.addEventListener("load", function(){ navigator.serviceWorker.register("/sw.js").catch(function(){}); });
@@ -1057,6 +1201,23 @@ let neGetSectionVisualField=(d,sectionKey,field)=>{
   if(sv&&typeof sv==="object"&&sv[field]!==undefined) return sv[field];
   return d?d["category"+field.charAt(0).toUpperCase()+field.slice(1)]:undefined;
 };
+// New-upload alerts: ON/OFF switch in the menu (above Install App).
+let [neAlertState,setNeAlertState]=G.useState(()=>{try{return window.neAlerts?window.neAlerts.state():"unsupported"}catch(err){return "unsupported"}});
+let [neAlertBusy,setNeAlertBusy]=G.useState(!1);
+G.useEffect(()=>{const up=()=>{try{setNeAlertState(window.neAlerts?window.neAlerts.state():"unsupported")}catch(err){}};up();window.addEventListener("ne-alerts-change",up);document.addEventListener("visibilitychange",up);return()=>{window.removeEventListener("ne-alerts-change",up);document.removeEventListener("visibilitychange",up)}},[]);
+const neAlertMenuButton=()=>{
+  if(neAlertState==="unsupported"||!window.neAlerts)return null;
+  const on=neAlertState==="on";
+  const label=on?"New upload alerts: ON":neAlertState==="blocked"?"Alerts blocked in browser":"New upload alerts: OFF";
+  return c("button",{type:"button","data-ne-alerts-menu":neAlertState,disabled:neAlertBusy,onClick:async()=>{
+      if(neAlertState==="blocked"){alert("Alerts are blocked for this site.\n\nTo turn them on: open your browser's settings for this site (tap the lock or ⓘ next to the address) → Notifications → Allow. Then come back and tap this button again.");return}
+      setNeAlertBusy(!0);try{if(on)await window.neAlerts.disable();else await window.neAlerts.enable()}catch(err){}setNeAlertBusy(!1);
+    },className:"w-full h-11 rounded-full font-semibold transition-colors",style:{display:"flex",alignItems:"center",justifyContent:"center",gap:"8px",marginBottom:"8px",border:"2px solid #14532d",background:on?"#ecfdf3":"#ffffff",color:"#14532d"},children:[
+      i("span",{style:{fontSize:"18px"},children:on?"🔔":"🔕"}),
+      i("span",{children:neAlertBusy?"Please wait…":label}),
+      i("span",{"aria-hidden":"true",style:{marginLeft:"4px",width:"34px",height:"20px",borderRadius:"999px",background:on?"#16a34a":"#d1d5db",position:"relative",flex:"0 0 auto"},children:i("span",{style:{position:"absolute",top:"2px",left:on?"16px":"2px",width:"16px",height:"16px",borderRadius:"50%",background:"#fff",transition:"left .15s"}})})
+    ]});
+};
 let neNavIsPopRef=G.useRef(false);
 let neAllDataLoadStartedRef=G.useRef(false);
 G.useEffect(()=>{try{history.replaceState({type:"home"},"","")}catch(err){}const onPop=(ev)=>{neNavIsPopRef.current=true;f(ev.state||{type:"home"})};window.addEventListener("popstate",onPop);return()=>window.removeEventListener("popstate",onPop)},[]);G.useEffect(()=>{if(neNavIsPopRef.current){neNavIsPopRef.current=false;return}try{history.pushState(o,"","")}catch(err){}},[o]);
@@ -1073,7 +1234,40 @@ G.useEffect(()=>{try{history.replaceState({type:"home"},"","")}catch(err){}const
 // revision, and other in-place updates all call f({type:"article",...})
 // again with the identical type string, so o.type does not change and no
 // unwanted scroll jump happens mid-task.
-G.useEffect(()=>{window.scrollTo(0,0)},[o.type]);
+// Every new page (another article, a related article lower down, a category,
+// a state...) opens at the TOP like a fresh page; the phone's Back button
+// returns to the previous page at the exact place you left it. Editing or
+// saving the same article never jumps the screen.
+let neScrollStackRef=G.useRef([]),neScrollPopRef=G.useRef(window.__nePopSeq||0),neScrollLastRef=G.useRef(0),neScrollKeyRef=G.useRef(null);
+const neScrollKey=o.type+"|"+String((o.data&&(o.data.id||o.data.slug||o.data.name))||"");
+G.useEffect(()=>{const onS=()=>{neScrollLastRef.current=window.scrollY||0};window.addEventListener("scroll",onS,{passive:true});return()=>{window.removeEventListener("scroll",onS)}},[]);
+G.useLayoutEffect(()=>{
+  if(neScrollKeyRef.current===null){neScrollKeyRef.current=neScrollKey;return}
+  if(neScrollKeyRef.current===neScrollKey)return;
+  neScrollKeyRef.current=neScrollKey;
+  const nePopped=(window.__nePopSeq||0)!==neScrollPopRef.current;neScrollPopRef.current=window.__nePopSeq||0;
+  if(nePopped){const y=neScrollStackRef.current.length?neScrollStackRef.current.pop():0;const go=()=>{try{window.scrollTo(0,y)}catch(err){}};go();requestAnimationFrame(go);setTimeout(go,150);neScrollLastRef.current=y;return}
+  neScrollStackRef.current.push(neScrollLastRef.current);if(neScrollStackRef.current.length>80)neScrollStackRef.current.shift();
+  try{window.scrollTo(0,0)}catch(err){}neScrollLastRef.current=0;
+},[neScrollKey]);
+// Links like /?article=ID (from Share and from new-upload alerts) open that item.
+let neDeepLinkRef=G.useRef(null);
+if(neDeepLinkRef.current===null){try{const q0=new URLSearchParams(window.location.search);const k0=["article","story","word","photo","tribe","person","place"].find((x)=>q0.get(x));neDeepLinkRef.current=k0?{kind:k0,id:q0.get(k0),at:Date.now()}:false}catch(err){neDeepLinkRef.current=false}}
+G.useEffect(()=>{
+  const dl=neDeepLinkRef.current;if(!dl)return;
+  if(Date.now()-dl.at>25000){neDeepLinkRef.current=false;return}
+  let done=false;
+  try{
+    if(dl.kind==="article"){const a0=(e.articles||[]).find((x)=>x.id===dl.id);if(a0){Ut(a0);done=true}}
+    else if(dl.kind==="story"){const s0=(e.stories||[]).find((x)=>x.id===dl.id);if(s0){setNeStorySearch(s0.title||"");f({type:"storyList"});done=true}}
+    else if(dl.kind==="word"){const w0=(e.dict||[]).find((x)=>x.id===dl.id);if(w0){setNeDictSearch(w0.word||"");f({type:"dictionary"});done=true}}
+    else if(dl.kind==="photo"){if((neMedia||[]).some((x)=>x.id===dl.id)){f({type:"communityPhotos"});done=true}}
+    else if(dl.kind==="tribe"){const t0=(e.tribes||[]).find((x)=>x.id===dl.id);if(t0){f({type:"tribeDetail",data:t0});done=true}}
+    else if(dl.kind==="person"){if((e.people||[]).some((x)=>x.id===dl.id)){f({type:"peopleList"});done=true}}
+    else if(dl.kind==="place"){if((e.places||[]).some((x)=>x.id===dl.id)){f({type:"placesList"});done=true}}
+  }catch(err){done=true}
+  if(done){neDeepLinkRef.current=false;try{const q1=new URLSearchParams(window.location.search);["article","story","word","photo","tribe","person","place"].forEach((x)=>q1.delete(x));history.replaceState(history.state,"",window.location.pathname+(q1.toString()?"?"+q1.toString():"")+window.location.hash)}catch(err){}}
+},[e.articles,e.stories,e.dict,e.tribes,e.people,e.places,neMedia]);
 G.useEffect(()=>{let a=localStorage.getItem("ne_encyclopedia_db_v1");if(a)try{const neC=JSON.parse(a);if(neC&&neC.settings){delete neC.settings.directAds;delete neC.settings.adNetwork;delete neC.settings.adsEnabled;delete neC.settings.adLayout;}n(neC)}catch{}let C=localStorage.getItem("ne_current_user");if(C)try{u(JSON.parse(C))}catch{}r(!0)},[]),G.useEffect(()=>{try{const params=new URLSearchParams(window.location.search);if(params.get("neadmin")==="1"){params.delete("neadmin");const cleanUrl=window.location.pathname+(params.toString()?"?"+params.toString():"")+window.location.hash;window.history.replaceState({},"",cleanUrl);}}catch(e){}},[]),G.useEffect(()=>{const neAK=JSON.stringify(neAuthHeadersSync())+'|'+neDataNonce;if(neArticlesKeyRef.current===neAK)return;neArticlesKeyRef.current=neAK;(async()=>{try{const res=await fetch('/api/d1/articles',{headers:neAuthHeadersSync(),credentials:"include"});const j=await res.json();if(j&&j.staffAuthInvalid)neHandleStaffAuthInvalid();if(j&&j.success&&Array.isArray(j.articles)){const parsed=j.articles.map(function(row){let categories=[],tags=[],references=[],infobox={},relatedIds=[];try{categories=JSON.parse(row.categories||'[]')}catch(e){}try{tags=JSON.parse(row.tags||'[]')}catch(e){}try{references=JSON.parse(row.references_list||'[]')}catch(e){}try{infobox=JSON.parse(row.infobox||'{}')}catch(e){}try{relatedIds=JSON.parse(row.relatedIds||'[]')}catch(e){}return Object.assign({},row,{categories:categories,tags:tags,references:references,infobox:infobox,relatedIds:relatedIds,verified:!!row.verified});});n(function(prev){return Object.assign({},prev,{articles:parsed});});console.log('[D1-READ-V31] Loaded '+parsed.length+' published articles from D1');try{setTimeout(()=>{try{window.dispatchEvent(new Event('ne-d1-articles-synced'))}catch(evErr){}},300)}catch(evErr){}}}catch(e){neArticlesKeyRef.current=null;console.log('[D1-READ-V31] fetch failed, using localStorage only',e)}})()},[l,neDataNonce]),G.useEffect(()=>{
   // all-data (tribes/people/places/dictionary/stories; photos are links, and
   // private lists only ever reach Super Admin) is loaded for everyone so that
@@ -2917,12 +3111,13 @@ neContributor&&i("button",{onClick:()=>{setNeContributor(null);try{localStorage.
   //  follows the last menu button instead of sticking to the screen edge.)
   // (small fixed gap, so a long menu never ends flush against the divider line)
   neColorMode==="Dark"?null:i("div",{"aria-hidden":"true",style:{flex:"0 0 16px"}}),
-  i("div",{"data-ne-install-menu-wrap":"1",style:neColorMode==="Dark"?{marginTop:"16px",backgroundColor:"inherit",paddingTop:"16px",paddingBottom:"16px",borderTop:"1px solid #e5e7eb"}:{marginTop:"auto",position:"sticky",bottom:"-16px",marginBottom:"-16px",backgroundColor:"inherit",paddingTop:"16px",paddingBottom:"16px",borderTop:"1px solid #e5e7eb"},children:
+  c("div",{"data-ne-install-menu-wrap":"1",style:neColorMode==="Dark"?{marginTop:"16px",backgroundColor:"inherit",paddingTop:"16px",paddingBottom:"16px",borderTop:"1px solid #e5e7eb"}:{marginTop:"auto",position:"sticky",bottom:"-16px",marginBottom:"-16px",backgroundColor:"inherit",paddingTop:"16px",paddingBottom:"16px",borderTop:"1px solid #e5e7eb"},children:[
+    neAlertMenuButton(),
     i("button",{"data-ne-install-menu":"1",onClick:()=>{P(!1);if(window.neInstallApp)window.neInstallApp("menu")},className:"w-full h-12 rounded-full ne-dgreen-bg text-white font-semibold transition-colors",style:{display:"flex",alignItems:"center",justifyContent:"center",gap:"8px"},children:[
       i("img",{src:"/icon-192.png",alt:"",style:{width:"22px",height:"22px",borderRadius:"5px",display:"block"}}),
       "Install App"
     ]})
-  })
+  ]})
 ]}),neShowSuggest&&i("div",{style:{zIndex:9999},className:"fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4",children:c("div",{className:"bg-white rounded-[20px] w-full max-w-[420px] p-6 shadow-2xl",children:[
   c("div",{className:"flex justify-between items-start mb-3",children:[i("h3",{className:"text-lg font-bold ne-dgreen-text",children:"Have a suggestion?"}),i("button",{onClick:()=>setNeShowSuggest(!1),className:"p-2 rounded-full bg-gray-100",children:i($n,{size:16})})]}),
   i("textarea",{value:neSuggestText,onChange:(a)=>setNeSuggestText(a.target.value),placeholder:"Write your suggestion here...",className:"w-full min-h-[110px] p-3 rounded-xl border ne-dgreen-border-15 focus:outline-none focus:ring-2 ne-dgreen-ring text-[14px]"}),
@@ -3234,6 +3429,21 @@ c("div",{className:"mt-10",children:[
     const featL=neFitLongest(featured.map((a)=>a.title));
     if(featured.length===0){
       return c("div",{className:"p-8 rounded-2xl bg-gray-50 text-center",children:[i("div",{className:"text-gray-500 font-semibold",children:"No featured content yet."}),i("div",{className:"text-gray-400 text-[13px] mt-1",children:"Super Admin can feature published articles here."})]});
+    }
+    // "No Box": no cards at all. Each featured article is shown like the
+    // start of the article itself -- picture (whole, never cropped), title,
+    // the first HALF of the article, and "Read more" right under that half.
+    if(featVis&&featVis.categoryShape==="none"){
+      const neHalf=(t)=>{t=String(t||"").trim();if(t.length<=280)return t;const mid=Math.ceil(t.length/2);const se=t.slice(mid,mid+250).search(/[.!?।](\s|$)/);if(se>=0)return t.slice(0,mid+se+1)+" …";let cut=mid;const sp=t.slice(mid).search(/\s/);if(sp>=0&&sp<80)cut+=sp;return t.slice(0,cut).replace(/[\s,;:.\-]+$/,"")+"…"};
+      const neTitleCol=featFontColor&&featFontColor.color;
+      return c("div",{"data-ne-featured-nobox":"1",className:"flex flex-col",children:featured.map((a,ix)=>c("article",{"data-ne-nobox-item":a.id,style:{padding:ix?"18px 0 14px":"4px 0 14px",borderTop:ix?"1px solid rgba(0,0,0,.10)":"none",background:"transparent"},children:[
+        a.imageUrl&&i("img",{loading:"lazy",decoding:"async",src:a.imageUrl,alt:a.title||"",onClick:()=>Ut(a),style:{display:"block",width:"100%",height:"auto",maxHeight:"70vh",objectFit:"contain",cursor:"pointer",marginBottom:"10px",borderRadius:"10px"}}),
+        i("h4",{onClick:()=>Ut(a),style:{fontSize:Math.max(19,featM.title+5)+"px",cursor:"pointer",...featFont,...featFontColor,...featFontExtra},className:"font-bold leading-tight"+(neTitleCol?"":" ne-dgreen-text"),children:a.title}),
+        a.state&&i("div",{className:"text-[12px] text-gray-500 mt-1",children:a.state}),
+        a.intro&&i("p",{className:"mt-2 text-[15px] font-semibold text-[#333] leading-relaxed",style:{overflowWrap:"anywhere"},children:a.intro}),
+        a.content&&i("div",{"data-ne-half":"1",className:"mt-2 whitespace-pre-wrap leading-relaxed text-[15px] text-[#333]",style:{overflowWrap:"anywhere"},children:neHalf(a.content)}),
+        i("button",{type:"button",onClick:()=>Ut(a),"data-ne-read-more":"1",className:"mt-3 h-10 px-5 rounded-full ne-dgreen-bg text-white text-[14px] font-bold",children:"Read more ›"})
+      ]},a.id))});
     }
     const cards=featured.map((a)=>c("button",{onClick:()=>Ut(a),style:cardStyle,className:"text-left rounded-2xl border-2 ne-dgreen-border bg-white overflow-hidden flex flex-col",children:[
       // Whole uploaded picture, original aspect ratio, never cropped: it is
@@ -4135,38 +4345,38 @@ M.type==="restricted"&&c("div",{className:"mt-4 space-y-3",children:[
     })})
   })()
 ]}),
-M.type==="liveStatus"&&c("div",{className:"mt-4",children:[
+M.type==="liveStatus"&&c("div",{className:"mt-3",children:[
   c("div",{className:"flex items-center gap-2",style:{marginBottom:"8px"},children:[
     neLiveStatus.error?i("div",{"data-ne-live-error":"1",className:"flex-1 text-[12px] font-semibold",style:{color:"#c62828"},children:"Could not refresh: "+neLiveStatus.error}):i("div",{"data-ne-live-updated":"1",className:"flex-1 text-[11px] text-gray-400",children:(neLiveStatus.at?"Updated at "+new Date(neLiveStatus.at).toLocaleTimeString()+" \u2022 ":"")+"Updates automatically every 10 seconds while this screen is open."}),
-    i("button",{"data-ne-live-refresh":"1",onClick:()=>neLoadLiveStats(),disabled:neLiveStatus.loading,className:"h-10 px-4 rounded-xl border-2 border-gray-200 text-[12px] font-bold shrink-0",children:neLiveStatus.loading?"Refreshing\u2026":"Refresh"})
+    i("button",{"data-ne-live-refresh":"1",onClick:()=>neLoadLiveStats(),disabled:neLiveStatus.loading,className:"h-8 px-3 rounded-lg border-2 border-gray-200 text-[11px] font-bold shrink-0",children:neLiveStatus.loading?"Refreshing\u2026":"Refresh"})
   ]}),
-  i("h4",{className:"font-bold text-sm text-[#1a237e]",children:"Users (Visitors + Contributors) — Live, Server-Tracked"}),
-  c("div",{className:"mt-2 grid grid-cols-2 md:grid-cols-4 gap-2",children:[
+  i("h4",{className:"font-bold text-[#1a237e]",style:{fontSize:"12px"},children:"Users (Visitors + Contributors) — Live, Server-Tracked"}),
+  c("div",{"data-ne-live-table":"users",className:"grid grid-cols-4 md:grid-cols-8",style:{gap:"5px",marginTop:"5px"},children:[
     {icon:"🟢",label:"Users Online Now",val:neLiveStats?neLiveStats.onlineNow:"…"},
     {icon:"✍️",label:"Contributors Online",val:neLiveStats?neLiveStats.contributorsOnline:"…"},
     {icon:"📅",label:"Users Today",val:neLiveStats?neLiveStats.usersToday:"…"},
     {icon:"🧮",label:"Total Users (All Time)",val:neLiveStats?neLiveStats.totalUsers:"…"},
     {icon:"⏱️",label:"Total Time on Site",val:neLiveStats?neFormatDuration(neLiveStats.totalTimeSeconds):"…"},
-    {icon:"⏲️",label:"Average Time on Site",val:neLiveStats?neFormatDuration(neLiveStats.avgTimeSeconds):"…"}
-  ].map((st)=>c("div",{key:st.label,className:"p-3 rounded-xl bg-gray-50 border border-gray-100 text-center",title:st.note||"",children:[
-    i("div",{className:"text-[18px]",children:st.icon}),
-    i("div",{className:"text-[18px] font-bold text-[#1a237e]",children:st.val}),
-    i("div",{className:"text-[10px] text-gray-500 leading-tight mt-0.5",children:st.label})
+    {icon:"⏲️",label:"Average Time on Site",val:neLiveStats?neFormatDuration(neLiveStats.avgTimeSeconds):"…"},
+    {icon:"📲",label:"App Installs",val:neLiveStats?(typeof neLiveStats.appInstalls==="number"?neLiveStats.appInstalls:0):"…",note:"Phones/computers that installed the app (each counted once)"},
+    {icon:"🔔",label:"Alerts On",val:neLiveStats?(typeof neLiveStats.alertSubscribers==="number"?neLiveStats.alertSubscribers:0):"…",note:"Visitors and contributors who get new-upload alerts"}
+  ].map((st)=>c("div",{key:st.label,"data-ne-live-tile":"1",className:"rounded-lg bg-gray-50 border border-gray-100 text-center min-w-0",style:{padding:"5px 3px"},title:st.note||"",children:[
+    c("div",{className:"font-bold text-[#1a237e] leading-tight",style:{fontSize:"14px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},children:[i("span",{style:{fontSize:"11px",marginRight:"3px"},children:st.icon}),st.val]}),
+    i("div",{className:"text-gray-500 leading-tight",style:{fontSize:"9.5px",marginTop:"2px"},children:st.label})
   ]}))}),
-  i("h4",{className:"mt-6 font-bold text-sm text-[#1a237e]",children:"Content"}),
-  c("div",{className:"mt-2 grid grid-cols-2 md:grid-cols-4 gap-2",children:[
+  i("h4",{className:"font-bold text-[#1a237e]",style:{fontSize:"12px",marginTop:"10px"},children:"Content"}),
+  c("div",{"data-ne-live-table":"content",className:"grid grid-cols-4 md:grid-cols-6",style:{gap:"5px",marginTop:"5px"},children:[
     {icon:"👥",label:"Total Contributors",val:(neLiveStats&&neLiveStats.content&&typeof neLiveStats.content.contributors==="number")?neLiveStats.content.contributors:(neLiveContributorCount===null?"…":neLiveContributorCount)},
     {icon:"📚",label:"Articles",val:(neLiveStats&&neLiveStats.content&&typeof neLiveStats.content.articles==="number")?neLiveStats.content.articles:e.articles.length},
     {icon:"📖",label:"Dictionary Words",val:(neLiveStats&&neLiveStats.content&&typeof neLiveStats.content.dictionary==="number")?neLiveStats.content.dictionary:e.dict.length},
     {icon:"📝",label:"Stories",val:(neLiveStats&&neLiveStats.content&&typeof neLiveStats.content.stories==="number")?neLiveStats.content.stories:e.stories.length},
     {icon:"🏹",label:"Tribes & Communities",val:(neLiveStats&&neLiveStats.content&&typeof neLiveStats.content.tribes==="number")?neLiveStats.content.tribes:e.tribes.length},
     {icon:"🖼️",label:"Photos",val:(neLiveStats&&neLiveStats.content&&typeof neLiveStats.content.media==="number")?neLiveStats.content.media:neMedia.length}
-  ].map((st)=>c("div",{key:st.label,className:"p-3 rounded-xl bg-gray-50 border border-gray-100 text-center",title:st.note||"",children:[
-    i("div",{className:"text-[18px]",children:st.icon}),
-    i("div",{className:"text-[18px] font-bold text-[#1a237e]",children:st.val}),
-    i("div",{className:"text-[10px] text-gray-500 leading-tight mt-0.5",children:st.label})
+  ].map((st)=>c("div",{key:st.label,"data-ne-live-tile":"1",className:"rounded-lg bg-gray-50 border border-gray-100 text-center min-w-0",style:{padding:"5px 3px"},title:st.note||"",children:[
+    c("div",{className:"font-bold text-[#1a237e] leading-tight",style:{fontSize:"14px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},children:[i("span",{style:{fontSize:"11px",marginRight:"3px"},children:st.icon}),st.val]}),
+    i("div",{className:"text-gray-500 leading-tight",style:{fontSize:"9.5px",marginTop:"2px"},children:st.label})
   ]}))}),
-  i("p",{className:"mt-3 text-[10px] text-gray-400",children:"\"Users\" counts are server-tracked via session heartbeats recorded in D1 (visitor_sessions), not estimated from page views. \"Online Now\" = active in the last 90 seconds. \"Total Time on Site\" sums each session's actual tracked active time. Contributors, Articles, Dictionary Words, Stories, Tribes & Communities, and Photos are live counts from D1."})
+  i("p",{className:"text-gray-400",style:{fontSize:"9.5px",marginTop:"8px",lineHeight:1.35},children:"\"Users\" counts are server-tracked via session heartbeats recorded in D1 (visitor_sessions), not estimated from page views. \"Online Now\" = active in the last 90 seconds. \"Total Time on Site\" sums each session's actual tracked active time. Contributors, Articles, Dictionary Words, Stories, Tribes & Communities, and Photos are live counts from D1. \"App Installs\" counts each phone/computer once when the app is installed or opened as an app. \"Alerts On\" = visitors and contributors who get new-upload alerts."})
 ]}),
 M.type==="suggestionsInbox"&&c("div",{className:"mt-4 space-y-3",children:[
   neSuggestions.length===0&&i("div",{className:"p-6 rounded-xl bg-gray-50 text-center text-gray-500 text-sm",children:"No suggestions yet."}),
