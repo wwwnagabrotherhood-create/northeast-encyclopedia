@@ -1221,7 +1221,12 @@ const neAlertMenuButton=()=>{
 // 🔔 Alerts in the bottom bar: the newest uploads in every category, with a
 // red number for what is new since you last looked.
 let [neBellOpen,setNeBellOpen]=G.useState(!1);
-let [neBellSeen,setNeBellSeen]=G.useState(()=>{try{let v=Number(localStorage.getItem("ne_bell_seen")||0);if(!v){v=Date.now()-7*86400000;localStorage.setItem("ne_bell_seen",String(v))}return v}catch(err){return Date.now()}});
+// Read/unread: everything older than the start mark counts as read; after
+// that each upload stays "new" (red number + green dot) until it is opened.
+let [neBellBase]=G.useState(()=>{try{let v=Number(localStorage.getItem("ne_bell_base")||0);if(!v){v=Date.now()-7*86400000;localStorage.setItem("ne_bell_base",String(v))}return v}catch(err){return Date.now()}});
+let [neBellRead,setNeBellRead]=G.useState(()=>{try{const v=JSON.parse(localStorage.getItem("ne_bell_read")||"[]");return Array.isArray(v)?v:[]}catch(err){return []}});
+const neBellMarkRead=(keys)=>{setNeBellRead((prev)=>{const nx=prev.slice();keys.forEach((k)=>{if(!nx.includes(k))nx.push(k)});const cut=nx.slice(-400);try{localStorage.setItem("ne_bell_read",JSON.stringify(cut))}catch(err){}return cut})};
+let [neFeatOpen,setNeFeatOpen]=G.useState({});
 let [neShowPwLogin,setNeShowPwLogin]=G.useState(!1);
 const neBellItems=G.useMemo(()=>{
   const out=[];
@@ -1230,18 +1235,22 @@ const neBellItems=G.useMemo(()=>{
   add(neMedia,"photo","createdAt","title","caption");add(e.tribes,"tribe","createdAt","name","state");add(e.people,"person","createdAt","name","role");add(e.places,"place","createdAt","name","state");
   out.sort((a,b)=>b.t-a.t);return out.slice(0,60);
 },[e.articles,e.stories,e.dict,neMedia,e.tribes,e.people,e.places]);
-const neBellUnread=neBellItems.filter((x)=>x.t>neBellSeen).length;
-const neBellWasOpen=G.useRef(!1);
-G.useEffect(()=>{if(neBellOpen)neBellWasOpen.current=!0;else if(neBellWasOpen.current){neBellWasOpen.current=!1;const n0=Date.now();setNeBellSeen(n0);try{localStorage.setItem("ne_bell_seen",String(n0))}catch(err){}}},[neBellOpen]);
+const neBellIsNew=(x)=>x.t>neBellBase&&!neBellRead.includes(x.kind+":"+x.id);
+const neBellUnread=neBellItems.filter(neBellIsNew).length;
+// The list is a step in the Back history: open list -> open upload -> Back
+// returns to the list -> Back closes the list.
+const neBellShow=()=>{try{history.pushState({...(history.state||{type:"home"}),neBell:1},"")}catch(err){}setNeBellOpen(!0)};
+const neBellClose=()=>{try{if(history.state&&history.state.neBell){history.back();return}}catch(err){}setNeBellOpen(!1)};
+G.useEffect(()=>{const onP=(ev)=>{setNeBellOpen(!!(ev.state&&ev.state.neBell))};window.addEventListener("popstate",onP);return()=>window.removeEventListener("popstate",onP)},[]);
 const NE_KIND_INFO={article:["📚","Article"],story:["📝","Story"],word:["📖","Dictionary word"],photo:["🖼️","Photo"],tribe:["🏹","Tribes & Communities"],person:["👤","People"],place:["📍","Places"]};
 const neAgo=(t)=>{const s0=Math.max(0,(Date.now()-t)/1000);if(s0<60)return "just now";if(s0<3600)return Math.floor(s0/60)+"m ago";if(s0<86400)return Math.floor(s0/3600)+"h ago";if(s0<86400*30)return Math.floor(s0/86400)+"d ago";try{return new Date(t).toLocaleDateString()}catch(err){return ""}};
 const neBellPanel=()=>neBellOpen&&c("div",{"data-ne-bell-panel":"1",className:"mx-auto px-3 border-b border-gray-100",style:{maxWidth:"560px",paddingTop:"10px",paddingBottom:"8px"},children:[
   c("div",{className:"flex items-center justify-between",style:{marginBottom:"8px"},children:[
     c("div",{className:"min-w-0",children:[i("div",{className:"text-[13px] font-bold ne-dgreen-text",children:"🔔 New on Northeast Encyclopedia"}),i("div",{className:"text-gray-500",style:{fontSize:"10.5px"},children:"Newest uploads in every category"})]}),
-    i("button",{onClick:()=>setNeBellOpen(!1),className:"px-3 rounded-full ne-dgreen-bg text-white text-[11px] font-semibold shrink-0",style:{height:"28px"},children:"Done"})]}),
+    c("div",{className:"flex items-center gap-2 shrink-0",children:[neBellUnread>0&&i("button",{type:"button","data-ne-bell-allread":"1",onClick:()=>neBellMarkRead(neBellItems.filter(neBellIsNew).map((x)=>x.kind+":"+x.id)),className:"text-[11px] underline text-gray-500",children:"Mark all read"}),i("button",{onClick:neBellClose,className:"px-3 rounded-full ne-dgreen-bg text-white text-[11px] font-semibold",style:{height:"28px"},children:"Done"})]})]}),
   neAlertMenuButton(),
   neBellItems.length===0?i("div",{className:"p-4 rounded-xl bg-gray-50 text-center text-gray-500",style:{fontSize:"12.5px"},children:"Nothing new yet. New articles, stories, words and photos will show here."}):
-  i("div",{"data-ne-bell-list":"1",style:{maxHeight:"52vh",overflowY:"auto",display:"flex",flexDirection:"column",gap:"6px"},children:neBellItems.map((x)=>{const k0=NE_KIND_INFO[x.kind]||["•",""];const isNew=x.t>neBellSeen;return c("button",{key:x.kind+":"+x.id,type:"button","data-ne-bell-item":x.kind,onClick:()=>{setNeBellOpen(!1);neOpenItem(x.kind,x.item)},className:"w-full text-left flex items-start gap-2 rounded-xl border",style:{padding:"8px 10px",backgroundColor:isNew?"#f0fdf4":"#ffffff",borderColor:isNew?"#bbf7d0":"#f3f4f6"},children:[
+  i("div",{"data-ne-bell-list":"1",style:{maxHeight:"52vh",overflowY:"auto",display:"flex",flexDirection:"column",gap:"6px"},children:neBellItems.map((x)=>{const k0=NE_KIND_INFO[x.kind]||["•",""];const isNew=neBellIsNew(x);return c("button",{key:x.kind+":"+x.id,type:"button","data-ne-bell-item":x.kind,onClick:()=>{neBellMarkRead([x.kind+":"+x.id]);setNeBellOpen(!1);neOpenItem(x.kind,x.item)},className:"w-full text-left flex items-start gap-2 rounded-xl border",style:{padding:"8px 10px",backgroundColor:isNew?"#f0fdf4":"#ffffff",borderColor:isNew?"#bbf7d0":"#f3f4f6"},children:[
     i("span",{style:{fontSize:"18px",lineHeight:"22px",flex:"0 0 auto"},children:k0[0]}),
     c("span",{className:"min-w-0 flex-1",children:[
       i("span",{className:"block font-semibold text-[#1f2937]",style:{fontSize:"13px",lineHeight:1.3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"},children:x.title}),
@@ -1271,7 +1280,7 @@ G.useEffect(()=>{try{history.replaceState({type:"home"},"","")}catch(err){}const
 // saving the same article never jumps the screen.
 let neScrollStackRef=G.useRef([]),neScrollPopRef=G.useRef(window.__nePopSeq||0),neScrollLastRef=G.useRef(0),neScrollKeyRef=G.useRef(null);
 const neScrollKey=o.type+"|"+String((o.data&&(o.data.id||o.data.slug||o.data.name))||"");
-G.useEffect(()=>{const onS=()=>{neScrollLastRef.current=window.scrollY||0};window.addEventListener("scroll",onS,{passive:true});return()=>{window.removeEventListener("scroll",onS)}},[]);
+G.useEffect(()=>{const onS=()=>{neScrollLastRef.current=window.scrollY||0};const onP=()=>{setTimeout(()=>{neScrollPopRef.current=window.__nePopSeq||0},0)};window.addEventListener("scroll",onS,{passive:true});window.addEventListener("popstate",onP);return()=>{window.removeEventListener("scroll",onS);window.removeEventListener("popstate",onP)}},[]);
 G.useLayoutEffect(()=>{
   if(neScrollKeyRef.current===null){neScrollKeyRef.current=neScrollKey;return}
   if(neScrollKeyRef.current===neScrollKey)return;
@@ -3069,7 +3078,7 @@ const NE_NAV_ITEMS={
   search:{icon:"🔍",label:"Search",active:()=>neSearchOpen,go:()=>{setNeSearchOpen(!neSearchOpen);try{window.scrollTo({top:0,behavior:"smooth"})}catch(err){}}},
   write:{icon:"➕",label:"Write Article",active:()=>o.type==="editArticle",go:()=>{setNeSearchOpen(!1);neWriteArticle()},big:!0},
   dictionary:{icon:"📚",label:"Dictionary",active:()=>o.type==="dictionary"||o.type==="addWord",go:()=>{setNeSearchOpen(!1);f({type:"dictionary"});try{window.scrollTo({top:0})}catch(err){}}},
-  alerts:{icon:"\ud83d\udd14",label:"Alerts",active:()=>neBellOpen,go:()=>{setNeSearchOpen(!1);setNeNavArrangeOpen(!1);setNeBellOpen(!neBellOpen)},badge:()=>neBellUnread}
+  alerts:{icon:"\ud83d\udd14",label:"Alerts",active:()=>neBellOpen,go:()=>{setNeSearchOpen(!1);setNeNavArrangeOpen(!1);if(neBellOpen)neBellClose();else neBellShow()},badge:()=>neBellUnread}
 };
 const NE_NAV_SIZES={Small:{icon:16,label:9,bar:50,big:40,bigFont:24,lift:14},Medium:{icon:20,label:10,bar:60,big:48,bigFont:30,lift:20},Large:{icon:27,label:11.5,bar:74,big:58,bigFont:36,lift:24}};
 const nz=NE_NAV_SIZES[neNavIconSize]||NE_NAV_SIZES.Medium;
@@ -3107,7 +3116,7 @@ const neBottomBar=()=>{
     adRow,arrange,neBellPanel(),
     c("nav",{className:"mx-auto flex px-1",style:{height:nz.bar+"px",maxWidth:"560px",alignItems:"stretch"},children:[
       ...neNavOrder.map(btn),
-      c("button",{key:"settings",onClick:()=>{setNeBellOpen(!1);setNeNavArrangeOpen(!neNavArrangeOpen)},"aria-label":"Settings",className:"flex-1 min-w-0 flex flex-col items-center justify-center gap-1 py-1",children:[
+      c("button",{key:"settings",onClick:()=>{if(neBellOpen)neBellClose();setNeNavArrangeOpen(!neNavArrangeOpen)},"aria-label":"Settings",className:"flex-1 min-w-0 flex flex-col items-center justify-center gap-1 py-1",children:[
         i("span",{style:{fontSize:nz.icon+"px",lineHeight:1,opacity:neNavArrangeOpen?1:.8},children:"⚙️"}),
         i("span",{style:{fontSize:nz.label+"px"},className:"leading-none "+(neNavArrangeOpen?"font-bold ne-dgreen-text":"font-medium text-gray-600"),children:"Settings"})]})]})]});
   return c(tl,{children:[
@@ -3487,7 +3496,8 @@ c("div",{className:"mt-10",children:[
     }
     // "No Box": no cards at all. Each featured article is shown like the
     // start of the article itself -- picture (whole, never cropped), title,
-    // the first HALF of the article, and "Read more" right under that half.
+    // the first HALF of the article, and "Read more" right under that half;
+    // "Read more" opens the rest right there (no new page), "Show less" folds it.
     if(featVis&&featVis.categoryShape==="none"){
       const neHalf=(t)=>{t=String(t||"").trim();if(t.length<=280)return t;const mid=Math.ceil(t.length/2);const se=t.slice(mid,mid+250).search(/[.!?।](\s|$)/);if(se>=0)return t.slice(0,mid+se+1)+" …";let cut=mid;const sp=t.slice(mid).search(/\s/);if(sp>=0&&sp<80)cut+=sp;return t.slice(0,cut).replace(/[\s,;:.\-]+$/,"")+"…"};
       const neTitleCol=featFontColor&&featFontColor.color;
@@ -3496,8 +3506,8 @@ c("div",{className:"mt-10",children:[
         i("h4",{onClick:()=>Ut(a),style:{fontSize:Math.max(19,featM.title+5)+"px",cursor:"pointer",...featFont,...featFontColor,...featFontExtra},className:"font-bold leading-tight"+(neTitleCol?"":" ne-dgreen-text"),children:a.title}),
         a.state&&i("div",{className:"text-[12px] text-gray-500 mt-1",children:a.state}),
         a.intro&&i("p",{className:"mt-2 text-[15px] font-semibold text-[#333] leading-relaxed",style:{overflowWrap:"anywhere"},children:a.intro}),
-        a.content&&i("div",{"data-ne-half":"1",className:"mt-2 whitespace-pre-wrap leading-relaxed text-[15px] text-[#333]",style:{overflowWrap:"anywhere"},children:neHalf(a.content)}),
-        i("button",{type:"button",onClick:()=>Ut(a),"data-ne-read-more":"1",className:"mt-2 rounded-full ne-dgreen-bg text-white font-semibold",style:{height:"30px",padding:"0 14px",fontSize:"12.5px",lineHeight:"30px"},children:"Read more ›"})
+        a.content&&i("div",{"data-ne-half":"1","data-ne-full":neFeatOpen[a.id]?"1":"0",className:"mt-2 whitespace-pre-wrap leading-relaxed text-[15px] text-[#333]",style:{overflowWrap:"anywhere"},children:neFeatOpen[a.id]?String(a.content).trim():neHalf(a.content)}),
+        (neFeatOpen[a.id]||String(a.content||"").trim().length>280)&&i("button",{type:"button","data-ne-read-more":neFeatOpen[a.id]?"less":"more",onClick:()=>{const op=!neFeatOpen[a.id];setNeFeatOpen((m0)=>({...m0,[a.id]:op}));if(!op){setTimeout(()=>{try{const el=document.querySelector('[data-ne-nobox-item="'+a.id+'"]');if(el){const r=el.getBoundingClientRect();if(r.top<0)window.scrollTo(0,window.scrollY+r.top-90)}}catch(err){}},30)}},className:"font-bold ne-dgreen-text",style:{fontSize:"15px",lineHeight:1.3,background:"none",border:0,padding:"6px 0 0",cursor:"pointer"},children:neFeatOpen[a.id]?"Show less \u2039":"Read more \u203a"})
       ]},a.id))});
     }
     const cards=featured.map((a)=>c("button",{onClick:()=>Ut(a),style:cardStyle,className:"text-left rounded-2xl border-2 ne-dgreen-border bg-white overflow-hidden flex flex-col",children:[
