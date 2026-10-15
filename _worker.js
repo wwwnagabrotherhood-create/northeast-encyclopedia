@@ -254,11 +254,19 @@ function neSanitizeAdNetwork(v){
     const x = typeof inSlots[k]==='string' ? inSlots[k].trim() : '';
     if(/^[0-9]{5,20}$/.test(x)) slots[k] = x;
   }
-  return { enabled: src.enabled===true && !!client, provider: 'adsense', client, slots };
+  // "4 equal cards": up to 4 Google ad-unit IDs per place (one per card).
+  const cards = {};
+  const inCards = src.cards && typeof src.cards==='object' ? src.cards : {};
+  for(const k of NE_AD_NETWORK_SLOTS){
+    const arr = Array.isArray(inCards[k]) ? inCards[k] : [];
+    const four = [0,1,2,3].map((ix) => { const x = typeof arr[ix]==='string' ? arr[ix].trim() : ''; return /^[0-9]{5,20}$/.test(x) ? x : ''; });
+    if(four.some(Boolean)) cards[k] = four;
+  }
+  return { enabled: src.enabled===true && !!client, provider: 'adsense', client, slots, cards };
 }
 // How direct ads are laid out in each in-page placement (display only, never
 // a limit on how many ads can be stored). Default = single (today's look).
-const NE_AD_LAYOUT_MODES = ['single','row','swipe','rotate'];
+const NE_AD_LAYOUT_MODES = ['single','row','swipe','rotate','cards4'];
 function neSanitizeAdLayout(v){
   const src = v && typeof v==='object' ? v : {};
   const out = {};
