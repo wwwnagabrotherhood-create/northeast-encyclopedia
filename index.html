@@ -350,6 +350,7 @@
   }
 })();
 </script>
+<style>.ne-ad4-row{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding:20px 2px 6px}.ne-ad4-row>.ne-ad4-card{flex:0 0 80%;max-width:80%;scroll-snap-align:start}@media (min-width:768px){.ne-ad4-row{overflow-x:visible}.ne-ad4-row>.ne-ad4-card{flex:1 1 0;max-width:none;min-width:0}}</style>
 </head>
 
 <body>
@@ -1761,12 +1762,12 @@ z("");
       if(M&&M.type==="restricted")await neLoadContributorsList();
     }catch(err){alert("Network error — could not reach the server.")}
   },
-  an=(a)=>{if(!e.settings.adsEnabled)return null;const neLay=a==="AD_MOBILE"?{mode:"single",perRow:1}:neAdLayoutFor(e.settings,a);const neAll=neDirectAdsFor(e.settings,a);if(neAll.length&&(neLay.mode==="row"||neLay.mode==="swipe"))return neRenderAdStrip(neAll,neLay,a);if(neAll.length>1&&neLay.mode==="rotate")return i(NeAdRotator,{ads:neAll,slot:a,lay:neLay},a+"_"+neAll.map((x)=>x.id).join("|"));const neDA=neDirectAdFor(e.settings,a);if(neDA)return neRenderDirectAd(neDA,a==="AD_MOBILE"?null:neLay);const neNA=neAdNetworkFor(e.settings,a);if(neNA)return c("div",{"data-ne-adnet-slot":a,className:"w-full my-4",style:{position:"relative",border:"1px dashed rgba(255,111,0,.3)",borderRadius:"8px",padding:"22px 4px 4px"},children:[neAdHandle("ADVERTISEMENT"),i(NeAdNetworkUnit,{client:neNA.client,slot:neNA.slot},neNA.client+"_"+neNA.slot)]});return c("div",{"data-ne-ad-empty":a,className:"w-full bg-[#fff8e1] border border-dashed border-[#ff6f00]/30 rounded-lg p-3 text-center my-4",style:{position:"relative"},children:[neAdHandle("AD"),i("p",{className:"text-sm text-gray-600 mt-1",style:{padding:"0 30px"},children:"Support local Northeast businesses. Ad space for future Google AdSense."})]})};
+  an=(a)=>{if(!e.settings.adsEnabled)return null;const neLay=a==="AD_MOBILE"?{mode:"single",perRow:1}:neAdLayoutFor(e.settings,a);const neAll=neDirectAdsFor(e.settings,a);if(neLay.mode==="cards4")return neRenderAdCards4(e.settings,a,neLay,neAll);if(neAll.length&&(neLay.mode==="row"||neLay.mode==="swipe"))return neRenderAdStrip(neAll,neLay,a);if(neAll.length>1&&neLay.mode==="rotate")return i(NeAdRotator,{ads:neAll,slot:a,lay:neLay},a+"_"+neAll.map((x)=>x.id).join("|"));const neDA=neDirectAdFor(e.settings,a);if(neDA)return neRenderDirectAd(neDA,a==="AD_MOBILE"?null:neLay);const neNA=neAdNetworkFor(e.settings,a);if(neNA)return c("div",{"data-ne-adnet-slot":a,className:"w-full my-4",style:{position:"relative",border:"1px dashed rgba(255,111,0,.3)",borderRadius:"8px",padding:"22px 4px 4px"},children:[neAdHandle("ADVERTISEMENT"),i(NeAdNetworkUnit,{client:neNA.client,slot:neNA.slot},neNA.client+"_"+neNA.slot)]});return c("div",{"data-ne-ad-empty":a,className:"w-full bg-[#fff8e1] border border-dashed border-[#ff6f00]/30 rounded-lg p-3 text-center my-4",style:{position:"relative"},children:[neAdHandle("AD"),i("p",{className:"text-sm text-gray-600 mt-1",style:{padding:"0 30px"},children:"Support local Northeast businesses. Ad space for future Google AdSense."})]})};
    const neAdTok=()=>{try{return localStorage.getItem("ne_auth_token")||""}catch(err){return ""}};
    const neRefreshPublicSettings=async()=>{try{const res=await fetch("/api/d1/settings");const j=await res.json();if(j&&j.success&&j.settings)n((prev)=>({...prev,settings:{...prev.settings,...j.settings}}))}catch(err){}};
    const neAdsLoad=async()=>{
      try{const r=await fetch("/api/admin/ads",{headers:{"Authorization":"Bearer "+neAdTok()},credentials:"include"});const j=await r.json().catch(()=>({}));if(j&&j.success)setNeAdsAdmin(j.ads||[]);else setNeAdMsg("Could not load ads: "+((j&&j.error)||r.status))}catch(err){setNeAdMsg("Network error — could not load ads.")}
-     try{const r2=await fetch("/api/admin/settings",{headers:{"Authorization":"Bearer "+neAdTok()},credentials:"include"});const j2=await r2.json().catch(()=>({}));const nx=j2&&j2.settings&&j2.settings.adNetwork;setNeAdNetForm({enabled:!!(nx&&nx.enabled),client:(nx&&nx.client)||"",slots:{...((nx&&nx.slots)||{})}});const nl={};["AD_TOP","AD_ARTICLE","AD_SIDEBAR"].forEach((k)=>{nl[k]=neAdLayoutFor({adLayout:j2&&j2.settings&&j2.settings.adLayout},k)});setNeAdLayoutForm(nl)}catch(err){}
+     try{const r2=await fetch("/api/admin/settings",{headers:{"Authorization":"Bearer "+neAdTok()},credentials:"include"});const j2=await r2.json().catch(()=>({}));const nx=j2&&j2.settings&&j2.settings.adNetwork;setNeAdNetForm({enabled:!!(nx&&nx.enabled),client:(nx&&nx.client)||"",slots:{...((nx&&nx.slots)||{})},cards:{AD_TOP:[0,1,2,3].map((ix)=>((nx&&nx.cards&&Array.isArray(nx.cards.AD_TOP)&&nx.cards.AD_TOP[ix])||""))}});const nl={};["AD_TOP","AD_ARTICLE","AD_SIDEBAR"].forEach((k)=>{nl[k]=neAdLayoutFor({adLayout:j2&&j2.settings&&j2.settings.adLayout},k)});setNeAdLayoutForm(nl)}catch(err){}
    };
    const neAdPost=async(url,body)=>{try{const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+neAdTok()},credentials:"include",body:JSON.stringify(body)});const j=await r.json().catch(()=>({}));return (r.ok&&j&&j.success!==false)?{ok:!0,j}:{ok:!1,error:(j&&j.error)||("HTTP "+r.status)}}catch(err){return {ok:!1,error:"Network error — could not reach the server."}}};
    const neAdSave=async(form)=>{if(neAdBusy)return;const ad={...form};if(!form.imageChanged&&form.id&&form.imageUrl)ad.imageUrl="/api/d1/image/ad/"+form.id;delete ad.imageChanged;delete ad.live;setNeAdBusy("ad");setNeAdNote(null);let res;try{res=await neAdPost("/api/admin/ads/save",{ad})}finally{setNeAdBusy("")}if(!res.ok){setNeAdNote({k:"ad",ok:!1,text:"Not saved: "+res.error});return}setNeAdMsg("Ad saved to D1.");setNeAdForm(null);await neAdsLoad();await neRefreshPublicSettings()};
@@ -2457,7 +2458,7 @@ function neRenderDirectAd(ad,lay){
 function neDirectAdsFor(settings,slot){
   try{ return ((settings&&Array.isArray(settings.directAds))?settings.directAds:[]).filter((x)=>x&&x.slot===slot); }catch(err){ return []; }
 }
-const NE_AD_LAYOUT_LABELS={single:"Single (1 ad)",row:"Row of cards",swipe:"Swipe row",rotate:"Rotate (one at a time)"};
+const NE_AD_LAYOUT_LABELS={single:"Single (1 ad)",row:"Row of cards",swipe:"Swipe row",rotate:"Rotate (one at a time)",cards4:"4 equal cards (Google + local)"};
 function neAdLayoutFor(settings,slot){
   try{
     const x=settings&&settings.adLayout&&settings.adLayout[slot];
@@ -2481,6 +2482,27 @@ function neRenderAdStrip(list,lay,slot){
     neAdHandle("AD"),
     i("div",{"data-ne-ad-strip":"1",style:wrap,children:ads.map(card)})
   ]});
+}
+// "4 equal cards" ad row (Manage Ads -> Ad Layout). Four cards of exactly the
+// same size: 80% of the screen wide on phones (swipe sideways), all four side
+// by side on computers. Each card shows its own Google ad unit (Ad Network ->
+// "4 cards" IDs), otherwise the next live local ad of this place, otherwise a
+// neat "Ad space" box.
+function neRenderAdCards4(settings,slot,lay,localAds){
+  const n=settings&&settings.adNetwork;
+  const netOn=!!(n&&n.enabled===true&&typeof n.client==="string"&&/^ca-pub-[0-9]{10,20}$/.test(n.client));
+  const ids=(netOn&&n.cards&&Array.isArray(n.cards[slot]))?n.cards[slot]:[];
+  const H=lay&&lay.h?lay.h:250;
+  let li=0;
+  const cards=[0,1,2,3].map((ix)=>{
+    const gid=(typeof ids[ix]==="string"&&/^[0-9]{5,20}$/.test(ids[ix]))?ids[ix]:"";
+    let kind="empty",body;
+    if(gid){kind="google";body=c(G.Fragment,{children:[i("div",{"aria-hidden":"true",style:{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",color:"#9ca3af",letterSpacing:".04em"},children:"Advertisement"}),i("div",{style:{position:"relative",zIndex:1,height:"100%"},children:i(NeAdNetworkUnit,{client:n.client,slot:gid,h:H},n.client+"_"+gid+"_"+ix)})]});}
+    else if(li<localAds.length){kind="local";body=neAdCard(localAds[li++],true,{height:"100%",border:"0",borderRadius:"0"},true);}
+    else body=c("div",{style:{height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"12px",textAlign:"center",color:"#9a6b2f"},children:[i("div",{style:{fontSize:"13px",fontWeight:700},children:"Ad space"}),i("div",{style:{fontSize:"11px",marginTop:"4px",color:"#6b7280"},children:"Support local Northeast businesses"})]});
+    return i("div",{"data-ne-ad4-card":kind,className:"ne-ad4-card",style:{height:H+"px",position:"relative",overflow:"hidden",borderRadius:"10px",backgroundColor:kind==="empty"?"#fff8e1":"#ffffff",border:"1px "+(kind==="empty"?"dashed":"solid")+" rgba(255,111,0,.3)"},children:body},"c"+ix);
+  });
+  return c("div",{"data-ne-ad-layout":"cards4","data-ne-ad-place":slot,className:"w-full my-4",style:{position:"relative",...neAdBoxStyle(lay)},children:[neAdHandle("AD"),i("div",{"data-ne-ad4-row":"1",className:"ne-ad4-row",children:cards})]});
 }
 // Rotate: one ad at a time; starts on a different ad each visit, then moves
 // to the next live ad every 6 seconds.
@@ -2512,6 +2534,7 @@ function NeAdNetworkUnit(props){
       }
     }catch(err){}
   },[props.client,props.slot]);
+  if(props.h)return i("ins",{ref:ref,className:"adsbygoogle",style:{display:"block",width:"100%",height:props.h+"px"},"data-ad-client":props.client,"data-ad-slot":props.slot});
   return i("ins",{ref:ref,className:"adsbygoogle",style:{display:"block"},"data-ad-client":props.client,"data-ad-slot":props.slot,"data-ad-format":"auto","data-full-width-responsive":"true"});
 }
 function NeColorDragPicker(props){
@@ -4115,7 +4138,7 @@ Ze&&c("div",{className:"mt-4 p-4 rounded-xl border bg-white",children:[
 ]}),
 Ze&&c("div",{className:"mt-4 p-4 rounded-xl border bg-white",children:[
   i("span",{className:"font-bold",children:"Ad Layout — how direct ads appear in each place"}),
-  i("p",{className:"text-[12px] text-gray-600 mt-2",children:"Single shows one ad (lowest Order). Row of cards shows every live ad in that place, exactly the chosen number per row, on phones and computers alike. Swipe row shows up to 8 live ads in one sideways-swipe row. Rotate shows one ad at a time and moves to the next every 6 seconds. The number is only the layout — you can keep any number of ads. The phone bottom bar always shows a single ad. Box height sets how tall the ad (each card in a row) is and Box width how wide the ad box is; the picture always fills its card, and the text keeps in proportion. Leave them blank for the normal size. For the best fit use wide pictures of 1200 × 628 pixels."}),
+  i("p",{className:"text-[12px] text-gray-600 mt-2",children:"Single shows one ad (lowest Order). Row of cards shows every live ad in that place, exactly the chosen number per row, on phones and computers alike. Swipe row shows up to 8 live ads in one sideways-swipe row. Rotate shows one ad at a time and moves to the next every 6 seconds. The number is only the layout — you can keep any number of ads. The phone bottom bar always shows a single ad. 4 equal cards shows exactly 4 cards of the same size (80% of the screen wide on phones, swipe sideways; all 4 side by side on computers): each card shows its Google ad unit from Ad Network (4 cards), otherwise a live local ad of that place, otherwise an \"Ad space\" box. Box height sets the card height (blank = 250 px). Box height sets how tall the ad (each card in a row) is and Box width how wide the ad box is; the picture always fills its card, and the text keeps in proportion. Leave them blank for the normal size. For the best fit use wide pictures of 1200 × 628 pixels."}),
   neAdLayoutForm===null?i("p",{className:"mt-3 text-[12px] text-gray-500",children:"Loading…"}):c("div",{className:"mt-3 space-y-2",children:[
     ...["AD_TOP","AD_ARTICLE","AD_SIDEBAR"].map((k)=>{
       const lay=neAdLayoutForm[k]||{mode:"single",perRow:3,h:0,w:0};
@@ -4125,7 +4148,7 @@ Ze&&c("div",{className:"mt-4 p-4 rounded-xl border bg-white",children:[
         i("p",{className:"text-[11px] text-gray-500 mt-1",children:liveHere+" live ad"+(liveHere===1?"":"s")+" here now"}),
         c("div",{className:"grid grid-cols-2 gap-2",children:[
           c("label",{className:"block text-[12px] text-gray-600",children:["Layout",c("select",{value:lay.mode,onChange:(ev)=>setNeAdLayoutForm({...neAdLayoutForm,[k]:{...lay,mode:ev.target.value}}),className:"w-full h-9 px-3 rounded-lg border text-sm mt-1",children:Object.keys(NE_AD_LAYOUT_LABELS).map((m)=>i("option",{value:m,children:NE_AD_LAYOUT_LABELS[m]},m))})]}),
-          c("label",{className:"block text-[12px] text-gray-600",children:[lay.mode==="swipe"?"Cards visible at once":"Cards per row",c("select",{value:String(lay.perRow),disabled:!(lay.mode==="row"||lay.mode==="swipe"),onChange:(ev)=>setNeAdLayoutForm({...neAdLayoutForm,[k]:{...lay,perRow:parseInt(ev.target.value,10)}}),className:"w-full h-9 px-3 rounded-lg border text-sm mt-1 disabled:opacity-40",children:[1,2,3,4,5,6,7,8].map((nn)=>i("option",{value:String(nn),children:String(nn)},nn))})]})
+          c("label",{className:"block text-[12px] text-gray-600",children:[lay.mode==="swipe"?"Cards visible at once":"Cards per row",c("select",{value:lay.mode==="cards4"?"4":String(lay.perRow),disabled:!(lay.mode==="row"||lay.mode==="swipe"),onChange:(ev)=>setNeAdLayoutForm({...neAdLayoutForm,[k]:{...lay,perRow:parseInt(ev.target.value,10)}}),className:"w-full h-9 px-3 rounded-lg border text-sm mt-1 disabled:opacity-40",children:[1,2,3,4,5,6,7,8].map((nn)=>i("option",{value:String(nn),children:String(nn)},nn))})]})
         ]}),
         c("div",{className:"grid grid-cols-2 gap-2",children:[
           c("label",{className:"block text-[12px] text-gray-600",children:["Box height (px)",i("input",{type:"number",min:40,max:600,placeholder:"Auto","data-ne-ad-h":k,value:lay.h?String(lay.h):"",onChange:(ev)=>{const v=parseInt(ev.target.value,10);setNeAdLayoutForm({...neAdLayoutForm,[k]:{...lay,h:Number.isFinite(v)?v:0}})},className:"w-full h-9 px-3 rounded-lg border text-sm mt-1"})]}),
@@ -4143,6 +4166,11 @@ Ze&&c("div",{className:"mt-4 p-4 rounded-xl border bg-white",children:[
     c("label",{className:"flex items-center gap-2 text-[13px]",children:[i("input",{type:"checkbox",checked:!!neAdNetForm.enabled,onChange:(ev)=>setNeAdNetForm({...neAdNetForm,enabled:ev.target.checked})}),"Show ad-network ads"]}),
     c("label",{className:"block text-[12px] text-gray-600",children:["Publisher ID",i("input",{placeholder:"ca-pub-…",value:neAdNetForm.client,onChange:(ev)=>setNeAdNetForm({...neAdNetForm,client:ev.target.value}),className:"w-full h-9 px-3 rounded-lg border text-sm mt-1"})]}),
     ...["AD_TOP","AD_ARTICLE","AD_SIDEBAR"].map((k)=>c("label",{key:k,className:"block text-[12px] text-gray-600",children:["Ad-unit ID — "+NE_AD_SLOT_LABELS[k],i("input",{placeholder:"numbers only, blank = not used",value:(neAdNetForm.slots&&neAdNetForm.slots[k])||"",onChange:(ev)=>setNeAdNetForm({...neAdNetForm,slots:{...(neAdNetForm.slots||{}),[k]:ev.target.value}}),className:"w-full h-9 px-3 rounded-lg border text-sm mt-1"})]})),
+    c("div",{"data-ne-adnet-cards":"AD_TOP",className:"p-3 rounded-xl border",style:{backgroundColor:"#fffdf5"},children:[
+      i("p",{className:"font-bold text-[13px]",children:"Top — 4 cards (Google ad-unit IDs)"}),
+      i("p",{className:"text-[11px] text-gray-500 mt-1",children:"Used when the Top layout is \"4 equal cards\". One ad-unit ID per card (create them in AdSense as Display ads). Leave a card blank to show a local ad or \"Ad space\" there."}),
+      c("div",{className:"grid grid-cols-2 gap-2 mt-2",children:[0,1,2,3].map((ix)=>c("label",{key:ix,className:"block text-[12px] text-gray-600",children:["Card "+(ix+1),i("input",{"data-ne-adnet-card":String(ix+1),placeholder:"numbers only",value:((neAdNetForm.cards&&neAdNetForm.cards.AD_TOP)||[])[ix]||"",onChange:(ev)=>{const arr=[0,1,2,3].map((jx)=>((neAdNetForm.cards&&neAdNetForm.cards.AD_TOP)||[])[jx]||"");arr[ix]=ev.target.value;setNeAdNetForm({...neAdNetForm,cards:{...(neAdNetForm.cards||{}),AD_TOP:arr}})},className:"w-full h-9 px-3 rounded-lg border text-sm mt-1"})]}))})
+    ]}),
     i("button",{onClick:()=>neAdNetSave(neAdNetForm),disabled:!!neAdBusy,className:"mt-3 w-full h-10 rounded-xl bg-[#1a237e] text-white font-bold disabled:opacity-40",children:neAdBusy==="net"?"Saving…":"Save Ad Network"}),neAdNote&&neAdNote.k==="net"&&i("p",{"data-ne-save-note":"net",role:"status",className:"mt-3 text-[12px] font-bold",style:{color:neAdNote.ok?"#15803d":"#dc2626"},children:neAdNote.text}),
     i("p",{className:"text-[11px] text-gray-500",children:"An invalid Publisher ID or ad-unit ID is not kept, and the network stays off until a valid Publisher ID is saved."})
   ]})
