@@ -1221,10 +1221,12 @@ async function neAlertStats(env){
 // ===== end NE ALERTS + APP INSTALLS =========================================
 
 // ===== SUPER ADMIN GOOGLE LOGIN (added) =====================================
-// Only from the private ?neadmin=1 login box. Only the owner's Gmail gets in;
+// The normal Google sign-in (and the private ?neadmin=1 box) opens the Super
+// Admin Dashboard for the owner's Gmail only; everyone else stays a contributor.
 // the address is stored as a one-way fingerprint (SHA-256), so the email is
 // never written in the code. Optional extra Gmails: Cloudflare variable
-// SUPER_ADMIN_EMAILS (comma separated). Password login keeps working.
+// SUPER_ADMIN_EMAILS (comma separated). Password login is OFF; emergency
+// switch: Cloudflare variable ALLOW_PASSWORD_LOGIN = 1 turns it back on.
 const NE_SUPER_ADMIN_EMAIL_SHA256 = ['84c850721dfa9e5a87dc6fb1592faf7997edc3791b6c1c10b8eab95f8ff309c4'];
 async function neSha256Hex(s){
   const b = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)));
@@ -1237,31 +1239,36 @@ async function neIsSuperAdminEmail(env, email){
   if(extra.includes(email)) return true;
   return NE_SUPER_ADMIN_EMAIL_SHA256.includes(await neSha256Hex(email));
 }
+// Builds the Super Admin session for a verified Google account (g).
+async function neAdminTokenResponse(env, g){
+  const secret = getJwtSecret(env);
+  if(!secret) return jsonResponse({ success: false, error: 'JWT secret not configured' }, 500);
+  let user = null;
+  try{ const s = await env.NE_USERS_KV.get('user_benjamin'); if(s) user = JSON.parse(s); }catch(e){}
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    username: 'benjamin',
+    role: 'SUPER_ADMIN',
+    displayName: (user && user.displayName) || 'Ben Yanthan',
+    tokenVersion: (user && typeof user.tokenVersion === 'number') ? user.tokenVersion : 0,
+    via: 'google',
+    iat: now,
+    exp: now + 7 * 24 * 3600
+  };
+  const token = await signJWT(payload, secret);
+  const picture = (g && typeof g.picture === 'string' && /^https:\/\//.test(g.picture)) ? g.picture : '';
+  return new Response(JSON.stringify({ success: true, isAdmin: true, token, user: { username: payload.username, displayName: payload.displayName, role: payload.role, picture } }), {
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store',
+      'Set-Cookie': `ne_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 3600}` }
+  });
+}
 async function neAdminGoogleRoute(request, env){
   try{
     const body = await request.json().catch(() => ({}));
     const g = await verifyGoogleIdToken(body.credential, NE_CONTRIB_GOOGLE_CLIENT_ID);
     if(!g || g.email_verified !== true) return jsonResponse({ success: false, error: 'Google sign-in could not be verified' }, 401);
     if(!(await neIsSuperAdminEmail(env, g.email))) return jsonResponse({ success: false, error: 'This Google account is not the Super Admin.' }, 403);
-    const secret = getJwtSecret(env);
-    if(!secret) return jsonResponse({ success: false, error: 'JWT secret not configured' }, 500);
-    let user = null;
-    try{ const s = await env.NE_USERS_KV.get('user_benjamin'); if(s) user = JSON.parse(s); }catch(e){}
-    const now = Math.floor(Date.now() / 1000);
-    const payload = {
-      username: 'benjamin',
-      role: 'SUPER_ADMIN',
-      displayName: (user && user.displayName) || 'Ben Yanthan',
-      tokenVersion: (user && typeof user.tokenVersion === 'number') ? user.tokenVersion : 0,
-      via: 'google',
-      iat: now,
-      exp: now + 7 * 24 * 3600
-    };
-    const token = await signJWT(payload, secret);
-    return new Response(JSON.stringify({ success: true, token, user: { username: payload.username, displayName: payload.displayName, role: payload.role } }), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store',
-        'Set-Cookie': `ne_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 3600}` }
-    });
+    return await neAdminTokenResponse(env, g);
   }catch(e){ return jsonResponse({ success: false, error: 'Login error: ' + e.message }, 500); }
 }
 // ===== end SUPER ADMIN GOOGLE LOGIN =========================================
@@ -2245,6 +2252,8 @@ export default {
 
       const g = await verifyGoogleIdToken(credential, NE_CONTRIB_GOOGLE_CLIENT_ID);
       if(!g) return jsonResponse({success:false,error:'Google sign-in verification failed'},401);
+      // The owner's Gmail opens the Super Admin Dashboard instead of a contributor account.
+      if(g.email_verified===true && await neIsSuperAdminEmail(env, g.email)) return await neAdminTokenResponse(env, g);
 
       const googleSub = g.sub; // stable permanent identity - never use email as the id
       let row = await d1.prepare("SELECT * FROM contributors WHERE googleSub=?").bind(googleSub).first();
@@ -3444,6 +3453,8 @@ export default {
   // ================= END NE CONTRIBUTOR V1 =================
 
   if(path==='/api/login' && request.method==='POST'){
+    // Super Admin signs in with Google only. Emergency: set Cloudflare variable ALLOW_PASSWORD_LOGIN = 1.
+    if(String((env && env.ALLOW_PASSWORD_LOGIN) || '') !== '1') return jsonResponse({success:false,error:'Password login is turned off. Please sign in with Google.'},403);
     try{
       const body=await request.json().catch(()=>({}));
       const username=(body.username||'').toString().trim().toLowerCase();
