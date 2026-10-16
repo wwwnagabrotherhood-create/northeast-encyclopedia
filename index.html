@@ -133,7 +133,7 @@
     bar.id = "ne-install-bar"; bar.setAttribute("data-ne-install-bar", reason); bar.setAttribute("role", "dialog"); bar.setAttribute("aria-label", "Install the NE Encyclopedia app");
     bar.innerHTML =
       '<div style="width:42px;height:42px;border-radius:10px;overflow:hidden;flex:0 0 auto;border:1px solid #e5e7eb">' + ICON + '</div>' +
-      '<div style="flex:1;min-width:0;text-align:left"><div style="font-weight:700;font-size:14px;line-height:1.25;color:#14532d">Get the NE Encyclopedia app</div>' +
+      '<div style="flex:1;min-width:0;text-align:left"><div style="font-weight:700;font-size:12.5px;line-height:1.25;color:#14532d">Install this app for a better experience</div>' +
       '<div style="font-size:11.5px;line-height:1.3;color:#6b7280">Free · opens full screen, like an app</div></div>' +
       '<button type="button" data-ne-install-go="1" style="flex:0 0 auto;background:#14532d;color:#fff;border:0;border-radius:999px;height:36px;padding:0 16px;font-weight:700;font-size:13px;cursor:pointer">Install</button>' +
       '<button type="button" data-ne-install-close="1" aria-label="Close" style="flex:0 0 auto;background:none;border:0;font-size:18px;line-height:1;color:#9ca3af;width:32px;height:36px;cursor:pointer">✕</button>';
@@ -703,13 +703,15 @@ let neEngagementBlock=(t,cid,opts)=>{
       c("button",{onClick:()=>neReact(t,cid,"dislike"),style:row.myReaction==="dislike"?{backgroundColor:"#374151",borderColor:"#374151"}:undefined,className:"flex items-center gap-1 px-3 py-1.5 rounded-full border text-[12px] font-semibold "+(row.myReaction==="dislike"?"text-white":"border-gray-200 text-gray-700"),children:["👎 ",row.dislikes||0]}),
       c("button",{onClick:()=>neToggleCommentsOpen(t,cid),className:"flex items-center gap-1 px-3 py-1.5 rounded-full border border-gray-200 text-gray-700 text-[12px] font-semibold",children:["💬 ",row.commentsOpen?"Hide Comments":"Comments"]}),
       opts.downloadFile?c("button",{onClick:()=>neDownloadFile(opts.downloadFile,opts.downloadName||"download"),className:"flex items-center gap-1 px-3 py-1.5 rounded-full border border-gray-200 text-gray-700 text-[12px] font-semibold",children:"⬇️ Download"}):(opts.downloadText?c("button",{onClick:()=>neDownloadText(opts.downloadName||"content.txt",opts.downloadText),className:"flex items-center gap-1 px-3 py-1.5 rounded-full border border-gray-200 text-gray-700 text-[12px] font-semibold",children:"⬇️ Download"}):null),
-      opts.shareUrl?c("button",{onClick:()=>neShareContent(opts.shareTitle||"Northeast Encyclopedia",opts.shareUrl),className:"flex items-center gap-1 px-3 py-1.5 rounded-full border border-gray-200 text-gray-700 text-[12px] font-semibold",children:"🔗 Share"}):null
+      opts.shareUrl?c("button",{onClick:()=>neShareContent(opts.shareTitle||"Northeast Encyclopedia",opts.shareUrl),className:"flex items-center gap-1 px-3 py-1.5 rounded-full border border-gray-200 text-gray-700 text-[12px] font-semibold",children:"🔗 Share"}):null,
+      Ze?c("button",{"data-ne-who-btn":"1",onClick:()=>neToggleWho(t,cid),style:{borderColor:"#fcd34d",color:"#92400e"},className:"flex items-center gap-1 px-3 py-1.5 rounded-full border text-[12px] font-semibold",children:["👁 ",row.whoOpen?"Hide who":"Who reacted"]}):null
     ]}),
+    Ze&&row.whoOpen&&neWhoPanel(row),
     row.commentsOpen&&c("div",{className:"mt-3 space-y-2",children:[
       (row.comments||[]).length===0&&i("div",{className:"text-[12px] text-gray-400",children:"No comments yet. Be the first."}),
       (row.comments||[]).map((cm)=>c("div",{key:cm.id,className:"p-2.5 rounded-lg bg-gray-50 border",children:[
         c("div",{className:"flex items-center justify-between gap-2",children:[
-          c("div",{className:"text-[12px] font-bold",children:[cm.publicName," ",i("span",{className:"text-gray-400 font-normal",children:new Date(cm.createdAt).toLocaleString()})]}),
+          c("div",{className:"text-[12px] font-bold",children:[cm.publicName,(Ze&&cm.isAnonymous&&cm.realDisplayName)?i("span",{className:"text-amber-700",children:" (real: "+cm.realDisplayName+")"}):null," ",i("span",{className:"text-gray-400 font-normal",children:new Date(cm.createdAt).toLocaleString()})]}),
           (cm.isMine||Ze)&&i("button",{onClick:()=>neDeleteComment(t,cid,cm.id),className:"text-[11px] text-red-600 font-semibold",children:"Remove"})
         ]}),
         i("div",{className:"text-[13px] mt-1",children:cm.text})
@@ -729,15 +731,79 @@ let neEngagementBlock=(t,cid,opts)=>{
 // current view or underlying content lists actually change, and the inner
 // guard skips anything already loaded, so this never refetches on every
 // render.
+// Super Admin: who liked / disliked / commented (per item, and a site-wide log).
+let neLoadWho=async(t,cid)=>{
+  try{
+    let res=await fetch("/api/admin/engagement/who?contentType="+encodeURIComponent(t)+"&contentId="+encodeURIComponent(cid),{headers:neAuthHeaders(),credentials:"include"});
+    let d=await res.json().catch(()=>({}));
+    let key=neEngKey(t,cid);
+    setNeEngagementData((prev)=>({...prev,[key]:{...(prev[key]||{}),who:(d&&d.success)?d:{error:(d&&d.error)||("Error "+res.status)}}}));
+  }catch(e){}
+};
+let neToggleWho=(t,cid)=>{
+  let key=neEngKey(t,cid);
+  let was=!!(neEngagementData[key]&&neEngagementData[key].whoOpen);
+  setNeEngagementData((prev)=>({...prev,[key]:{...(prev[key]||{}),whoOpen:!was}}));
+  if(!was) neLoadWho(t,cid);
+};
+let neWhoName=(r)=>r.name+(r.email?" ("+r.email+")":"")+(r.actorType==="admin"?" [Super Admin]":"");
+let neWhoPanel=(row)=>{
+  const w=row.who;
+  const box=(kids)=>c("div",{"data-ne-who":"1",className:"mt-3 p-3 rounded-lg border text-[12px]",style:{background:"#fffbeb",borderColor:"#fcd34d"},children:kids});
+  if(!w) return box([i("div",{className:"text-gray-500",children:"Loading…"})]);
+  if(w.error) return box([i("div",{className:"text-red-600",children:"Could not load: "+w.error})]);
+  const likes=(w.reactions||[]).filter((r)=>r.type==="like"), dis=(w.reactions||[]).filter((r)=>r.type==="dislike");
+  const cms=w.comments||[];
+  const line=(icon,label,arr)=>c("div",{style:{marginTop:"6px",lineHeight:1.5},children:[i("b",{children:icon+" "+label+" ("+arr.length+"): "}),arr.length?arr.join(", "):i("span",{className:"text-gray-400",children:"nobody yet"})]});
+  return box([
+    i("div",{className:"font-bold",style:{color:"#92400e"},children:"Only you (Super Admin) can see this"}),
+    line("👍","Liked by",likes.map(neWhoName)),
+    line("👎","Disliked by",dis.map(neWhoName)),
+    line("💬","Commented",[...new Set(cms.map((x)=>x.name+(x.isAnonymous?" (shown as Anonymous)":"")+(x.actorType==="admin"?" [Super Admin]":"")))])
+  ]);
+};
+let neLoadEngLog=async()=>{
+  setNeEngLog((p0)=>({...(p0||{}),loading:!0}));
+  try{
+    let res=await fetch("/api/admin/engagement/recent?limit=200",{headers:neAuthHeaders(),credentials:"include"});
+    let d=await res.json().catch(()=>({}));
+    setNeEngLog((p0)=>(d&&d.success)?{items:d.items||[],counts:d.counts||{},filter:(p0&&p0.filter)||"all"}:{error:(d&&d.error)||("Error "+res.status)});
+  }catch(e){ setNeEngLog({error:"Network error — could not reach the server."}); }
+};
+let neEngLogOpen=(x)=>{
+  const kind={article:"article",story:"story",word:"word",media:"photo"}[x.contentType];
+  const src={article:e.articles,story:e.stories,word:e.dict,photo:neMedia}[kind]||[];
+  const it=src.find((y)=>y&&String(y.id)===String(x.contentId));
+  if(!it){ alert("That item is no longer on the site."); return; }
+  V(null); neOpenItem(kind,it);
+};
+let neEngagementLogUI=()=>{
+  const g=neEngLog||{};
+  if(g.error) return c("div",{className:"mt-4 p-4 rounded-xl bg-red-50 text-red-700 text-[13px]",children:["Could not load: ",g.error]});
+  if(!g.items) return i("div",{className:"mt-4 p-6 rounded-xl bg-gray-50 text-center text-gray-500 text-sm",children:"Loading…"});
+  const ft=g.filter||"all";
+  const rows=g.items.filter((x)=>ft==="all"||x.kind===ft);
+  const T={article:"Article",story:"Story",word:"Word",media:"Photo",talk:"Talk"};
+  const chip=(k0,label)=>i("button",{type:"button","data-ne-englog-filter":k0,onClick:()=>setNeEngLog((p0)=>({...p0,filter:k0})),className:"h-8 px-3 rounded-full text-[12px] font-semibold border "+(ft===k0?"bg-[#1a237e] text-white border-[#1a237e]":"bg-white text-gray-700 border-gray-200"),children:label});
+  return c("div",{"data-ne-englog":"1",className:"mt-4",children:[
+    c("div",{className:"flex flex-wrap gap-2",children:[chip("all","All"),chip("like","👍 Likes "+((g.counts&&g.counts.like)||0)),chip("dislike","👎 Dislikes "+((g.counts&&g.counts.dislike)||0)),chip("comment","💬 Comments "+((g.counts&&g.counts.comment)||0)),i("button",{type:"button",onClick:neLoadEngLog,className:"h-8 px-3 rounded-full text-[12px] font-semibold border border-gray-200 bg-white text-gray-700",children:g.loading?"Refreshing…":"↻ Refresh"})]}),
+    rows.length===0?i("div",{className:"mt-4 p-6 rounded-xl bg-gray-50 text-center text-gray-500 text-sm",children:"Nothing here yet."}):
+    c("div",{className:"mt-3 space-y-2",children:rows.map((x,ix)=>c("button",{key:ix,type:"button","data-ne-englog-row":x.kind,onClick:()=>neEngLogOpen(x),className:"w-full text-left p-3 rounded-xl border bg-white",children:[
+      c("div",{className:"text-[13px]",children:[i("span",{style:{marginRight:"6px"},children:x.kind==="like"?"👍":x.kind==="dislike"?"👎":"💬"}),i("b",{children:neWhoName(x)}),x.kind==="like"?" liked ":x.kind==="dislike"?" disliked ":" commented on ",i("b",{children:"“"+(x.title||"(removed item)")+"”"}),i("span",{className:"text-gray-500",children:" ("+(T[x.contentType]||x.contentType)+")"})]}),
+      x.kind==="comment"&&i("div",{className:"mt-1 text-[12.5px] text-gray-700",style:{overflowWrap:"anywhere"},children:(x.isAnonymous?"[shown as Anonymous] ":"")+x.text}),
+      i("div",{className:"mt-1 text-[11px] text-gray-400",children:x.createdAt?new Date(x.createdAt).toLocaleString():""})
+    ]}))})
+  ]});
+};
 G.useEffect(()=>{
   let targets=[];
   if(o.type==="article"&&o.data&&o.data.id) targets.push(["article",o.data.id]);
   if(o.type==="storyList") (e.stories||[]).forEach((st)=>{ if(st&&st.id) targets.push(["story",st.id]); });
-  if(o.type==="dictionary") (e.dict||[]).forEach((wd)=>{ if(wd&&wd.id) targets.push(["word",wd.id]); });
-  if(o.type==="home") (e.articles||[]).forEach((ar)=>{ if(ar&&ar.id&&Array.isArray(ar.categories)&&ar.categories.includes("Featured")) targets.push(["article",ar.id]); });
+  if(o.type==="dictionary"&&o.data&&o.data.wordId) targets.push(["word",o.data.wordId]);
+  if(o.type==="home") (e.articles||[]).slice().sort((x,y)=>(Date.parse(y.createdAt||"")||0)-(Date.parse(x.createdAt||"")||0)).forEach((ar,ix)=>{ if(ar&&ar.id&&(ix<30||(Array.isArray(ar.categories)&&ar.categories.includes("Featured")))) targets.push(["article",ar.id]); });
   if(o.type==="communityPhotos") (neMedia||[]).forEach((mItem)=>{ if(mItem&&mItem.id) targets.push(["media",mItem.id]); });
   targets.forEach(([t,cid])=>{ if(!neEngagementData[neEngKey(t,cid)]) neLoadEngagementSummary(t,cid); });
-},[o.type,o.data&&o.data.id,e.stories,e.dict,neMedia,e.articles]);
+},[o.type,o.data&&o.data.id,o.data&&o.data.wordId,e.stories,e.dict,neMedia,e.articles]);
 // Visitor/session heartbeat -- runs for every visitor (not just admins),
 // pauses while the tab is hidden so "time on site" reflects actual active
 // time rather than a forgotten background tab. The session id is a random
@@ -932,7 +998,11 @@ let neDeactivateHomeDesign=()=>{
   });
 };
 let neToggleSectionEnabled=(key)=>neUpdateEditDesign((d)=>{ const sections=Array.isArray(d.sections)?d.sections.map((s)=>s):NE_HOME_SECTION_DEFS.map((s,idx)=>({key:s.key,enabled:true,order:idx})); const i2=sections.findIndex((s)=>s.key===key); if(i2>=0) sections[i2]={...sections[i2],enabled:sections[i2].enabled===false}; return {...d,sections}; });
-let neSetSectionOrder=(key,order)=>neUpdateEditDesign((d)=>{ const sections=Array.isArray(d.sections)?d.sections.map((s)=>s):NE_HOME_SECTION_DEFS.map((s,idx)=>({key:s.key,enabled:true,order:idx})); const i2=sections.findIndex((s)=>s.key===key); if(i2>=0) sections[i2]={...sections[i2],order:Number(order)||0}; return {...d,sections}; });
+let neSetSectionOrder=(key,order)=>neUpdateEditDesign((d)=>{ const sections=Array.isArray(d.sections)?d.sections.map((s)=>s):NE_HOME_SECTION_DEFS.map((s,idx)=>({key:s.key,enabled:true,order:idx})); const i2=sections.findIndex((s)=>s.key===key); if(i2>=0) sections[i2]={...sections[i2],order:Number(order)||0}; else sections.push({key,enabled:true,order:Number(order)||0}); return {...d,sections}; });
+// Studio Home list in the order the homepage really uses (Header first, All Categories last).
+let neSectionOrderOf=(d,key)=>{ const secs=Array.isArray(d&&d.sections)?d.sections:[]; const en=secs.find((s0)=>s0&&s0.key===key); if(en&&typeof en.order==="number") return en.order; const di=NE_HOME_SECTION_DEFS.findIndex((s0)=>s0.key===key); return di<0?99:di; };
+let neStudioSectionList=()=>{ const d=neStudioEditDesign(); const fixedTop=NE_HOME_SECTION_DEFS.filter((s0)=>s0.key==="hero"); const movable=NE_HOME_SECTION_DEFS.filter((s0)=>s0.reorder).map((s0,ix)=>({s0,ix,o:neSectionOrderOf(d,s0.key)})).sort((a0,b0)=>a0.o-b0.o||a0.ix-b0.ix).map((x)=>x.s0); const fixedEnd=NE_HOME_SECTION_DEFS.filter((s0)=>!s0.reorder&&s0.key!=="hero"); return [...fixedTop,...movable,...fixedEnd]; };
+let neMoveSection=(key,dir)=>neUpdateEditDesign((d)=>{ const sections=Array.isArray(d.sections)?d.sections.map((s0)=>({...s0})):NE_HOME_SECTION_DEFS.map((s0,idx)=>({key:s0.key,enabled:true,order:idx})); NE_HOME_SECTION_DEFS.forEach((s0,idx)=>{ if(!sections.find((x)=>x.key===s0.key)) sections.push({key:s0.key,enabled:true,order:idx}); }); const movable=NE_HOME_SECTION_DEFS.filter((s0)=>s0.reorder).map((s0,ix)=>({key:s0.key,ix,o:neSectionOrderOf({sections},s0.key)})).sort((a0,b0)=>a0.o-b0.o||a0.ix-b0.ix).map((x)=>x.key); const at=movable.indexOf(key); const to=at+dir; if(at<0||to<0||to>=movable.length) return d; movable.splice(at,1); movable.splice(to,0,key); movable.forEach((k0,pos)=>{ const en=sections.find((x)=>x.key===k0); en.order=pos+1; }); return {...d,sections}; });
 let neSetCategoryDisplayCount=(val)=>neUpdateEditDesign((d)=>({...d,categoryDisplayCount:val==="null"?null:(val==="all"?"all":Number(val))}));
 let neRenameEditDesign=(name)=>neUpdateEditDesign((d)=>({...d,name}));
 let neSetCategoryShape=(val)=>neUpdateEditDesign((d)=>({...d,categoryShape:val==="default"?null:val}));
@@ -1210,14 +1280,14 @@ G.useEffect(()=>{const up=()=>{try{setNeAlertState(window.neAlerts?window.neAler
 const neAlertMenuButton=()=>{
   if(neAlertState==="unsupported"||!window.neAlerts)return null;
   const on=neAlertState==="on";
-  const label=on?"New upload alerts: ON":neAlertState==="blocked"?"Alerts blocked in browser":"New upload alerts: OFF";
+  const label=on?"Alert notifications: ON":neAlertState==="blocked"?"Alert notifications blocked in browser":"Alert notifications: OFF";
   return c("button",{type:"button","data-ne-alerts-menu":neAlertState,disabled:neAlertBusy,onClick:async()=>{
       if(neAlertState==="blocked"){alert("Alerts are blocked for this site.\n\nTo turn them on: open your browser's settings for this site (tap the lock or ⓘ next to the address) → Notifications → Allow. Then come back and tap this button again.");return}
       setNeAlertBusy(!0);try{if(on)await window.neAlerts.disable();else await window.neAlerts.enable()}catch(err){}setNeAlertBusy(!1);
     },className:"w-full h-11 rounded-full font-semibold transition-colors",style:{display:"flex",alignItems:"center",justifyContent:"center",gap:"8px",marginBottom:"8px",border:"2px solid #14532d",background:on?"#ecfdf3":"#ffffff",color:"#14532d"},children:[
       i("span",{style:{fontSize:"18px"},children:on?"🔔":"🔕"}),
       i("span",{children:neAlertBusy?"Please wait…":label}),
-      i("span",{"aria-hidden":"true",style:{marginLeft:"4px",width:"34px",height:"20px",borderRadius:"999px",background:on?"#16a34a":"#d1d5db",position:"relative",flex:"0 0 auto"},children:i("span",{style:{position:"absolute",top:"2px",left:on?"16px":"2px",width:"16px",height:"16px",borderRadius:"50%",background:"#fff",transition:"left .15s"}})})
+      i("span",{"aria-hidden":"true","data-ne-alert-switch":"1",style:{marginLeft:"4px",width:"34px",height:"20px",borderRadius:"999px",background:on?"#16a34a":"#d1d5db",position:"relative",flex:"0 0 auto"},children:i("span",{style:{position:"absolute",top:"2px",left:on?"16px":"2px",width:"16px",height:"16px",borderRadius:"50%",background:"#fff",transition:"left .15s"}})})
     ]});
 };
 // 🔔 Alerts in the bottom bar: the newest uploads in every category, with a
@@ -1229,6 +1299,7 @@ let [neBellBase]=G.useState(()=>{try{let v=Number(localStorage.getItem("ne_bell_
 let [neBellRead,setNeBellRead]=G.useState(()=>{try{const v=JSON.parse(localStorage.getItem("ne_bell_read")||"[]");return Array.isArray(v)?v:[]}catch(err){return []}});
 const neBellMarkRead=(keys)=>{setNeBellRead((prev)=>{const nx=prev.slice();keys.forEach((k)=>{if(!nx.includes(k))nx.push(k)});const cut=nx.slice(-400);try{localStorage.setItem("ne_bell_read",JSON.stringify(cut))}catch(err){}return cut})};
 let [neFeatOpen,setNeFeatOpen]=G.useState({});
+let [neEngLog,setNeEngLog]=G.useState(null);
 let [neShowPwLogin,setNeShowPwLogin]=G.useState(!1);
 const neBellItems=G.useMemo(()=>{
   const out=[];
@@ -1238,7 +1309,8 @@ const neBellItems=G.useMemo(()=>{
   out.sort((a,b)=>b.t-a.t);return out.slice(0,60);
 },[e.articles,e.stories,e.dict,neMedia,e.tribes,e.people,e.places]);
 const neBellIsNew=(x)=>x.t>neBellBase&&!neBellRead.includes(x.kind+":"+x.id);
-const neBellUnread=neBellItems.filter(neBellIsNew).length;
+const neBellUnreadItems=neBellItems.filter(neBellIsNew);
+const neBellUnread=neBellUnreadItems.length;
 // The list is a step in the Back history: open list -> open upload -> Back
 // returns to the list -> Back closes the list.
 const neBellShow=()=>{try{history.pushState({...(history.state||{type:"home"}),neBell:1},"")}catch(err){}setNeBellOpen(!0)};
@@ -1249,8 +1321,8 @@ G.useEffect(()=>{const onP=(ev)=>{setNeBellOpen(!!(ev.state&&ev.state.neBell));c
 const NE_KIND_INFO={article:["📚","Article"],story:["📝","Story"],word:["📖","Dictionary word"],photo:["🖼️","Photo"],tribe:["🏹","Tribes & Communities"],person:["👤","People"],place:["📍","Places"]};
 const neAgo=(t)=>{const s0=Math.max(0,(Date.now()-t)/1000);if(s0<60)return "just now";if(s0<3600)return Math.floor(s0/60)+"m ago";if(s0<86400)return Math.floor(s0/3600)+"h ago";if(s0<86400*30)return Math.floor(s0/86400)+"d ago";try{return new Date(t).toLocaleDateString()}catch(err){return ""}};
 const neBellPanel=()=>neBellOpen&&i("div",{"data-ne-bell-panel":"1",className:"mx-auto px-3 border-b border-gray-100",style:{maxWidth:"560px",paddingTop:"10px",paddingBottom:"8px"},children:
-  neBellItems.length===0?i("div",{className:"p-4 rounded-xl bg-gray-50 text-center text-gray-500",style:{fontSize:"12.5px"},children:"Nothing new yet. New articles, stories, words and photos will show here."}):
-  i("div",{"data-ne-bell-list":"1",style:{maxHeight:"60vh",overflowY:"auto",display:"flex",flexDirection:"column",gap:"6px"},children:neBellItems.map((x)=>{const k0=NE_KIND_INFO[x.kind]||["\u2022",""];const isNew=neBellIsNew(x);return c("button",{key:x.kind+":"+x.id,type:"button","data-ne-bell-item":x.kind,onClick:()=>{neBellMarkRead([x.kind+":"+x.id]);setNeBellOpen(!1);neOpenItem(x.kind,x.item)},className:"w-full text-left flex items-start gap-2 rounded-xl border",style:{padding:"8px 10px",backgroundColor:isNew?"#f0fdf4":"#ffffff",borderColor:isNew?"#bbf7d0":"#f3f4f6"},children:[
+  neBellUnreadItems.length===0?i("div",{"data-ne-bell-empty":"1",className:"p-4 rounded-xl bg-gray-50 text-center text-gray-500",style:{fontSize:"12.5px"},children:"You're all caught up. New articles, stories, words and photos will show here."}):
+  i("div",{"data-ne-bell-list":"1",style:{maxHeight:"60vh",overflowY:"auto",display:"flex",flexDirection:"column",gap:"6px"},children:neBellUnreadItems.map((x)=>{const k0=NE_KIND_INFO[x.kind]||["\u2022",""];const isNew=neBellIsNew(x);return c("button",{key:x.kind+":"+x.id,type:"button","data-ne-bell-item":x.kind,onClick:()=>{neBellMarkRead([x.kind+":"+x.id]);setNeBellOpen(!1);neOpenItem(x.kind,x.item)},className:"w-full text-left flex items-start gap-2 rounded-xl border",style:{padding:"8px 10px",backgroundColor:isNew?"#f0fdf4":"#ffffff",borderColor:isNew?"#bbf7d0":"#f3f4f6"},children:[
     i("span",{style:{fontSize:"18px",lineHeight:"22px",flex:"0 0 auto"},children:k0[0]}),
     c("span",{className:"min-w-0 flex-1",children:[
       i("span",{className:"block font-semibold text-[#1f2937]",style:{fontSize:"13px",lineHeight:1.3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"},children:x.title}),
@@ -1303,7 +1375,7 @@ const neOpenItem=(kind,x)=>{
   if(!x)return false;
   if(kind==="article"){Ut(x);return true}
   if(kind==="story"){setNeStorySearch(x.title||"");f({type:"storyList"});return true}
-  if(kind==="word"){setNeDictSearch(x.word||"");f({type:"dictionary"});return true}
+  if(kind==="word"){setNeDictSearch("");f({type:"dictionary",data:{wordId:x.id}});return true}
   if(kind==="photo"){f({type:"communityPhotos"});return true}
   if(kind==="tribe"){f({type:"tribeDetail",data:x});return true}
   if(kind==="person"){f({type:"peopleList"});return true}
@@ -2076,7 +2148,7 @@ function neBuildSelectedCategoryTiles(dbCats, selectedIds, f, articlesList, stor
 // they never had a shared legacy field, so an unset value is naturally
 // "None" (today's default appearance) with no fallback needed.
 const NE_DESIGN_SECTION_KEYS=["hero","quickActions","dailyNews","quickCategories","featured","exploreByTopic","allCategories"];
-const NE_LEGACY_SHARED_VISUAL_KEYS=["quickCategories","exploreByTopic","allCategories"];
+const NE_LEGACY_SHARED_VISUAL_KEYS=["quickCategories","allCategories"];
 function neSectionVisualDesign(design, sectionKey){
   try{
     if(!design) return design;
@@ -2162,7 +2234,7 @@ function neTitleFontSizeStyle(design){
 const NE_TITLE_OPTIONS=[
   {key:"headerLogo",label:"Header Title"},
   {key:"featuredHeading",label:"\"Today's Featured\" Heading"},
-  {key:"exploreByTopicHeading",label:"\"Explore by Topic\" Heading"},
+  {key:"exploreByTopicHeading",label:"\"Article\" Heading"},
   {key:"allCategoriesHeading",label:"\"All Categories\" Heading"}
 ];
 // Round 6: independent Colour control. The site's own existing brand colors
@@ -2927,7 +2999,7 @@ const NE_HOME_SECTION_DEFS=[
   {key:"dailyNews",label:"Daily Northeast News",reorder:true},
   {key:"quickCategories",label:"Quick Categories Grid",reorder:true},
   {key:"featured",label:"Today's Featured",reorder:true},
-  {key:"exploreByTopic",label:"Explore by Topic",reorder:false},
+  {key:"exploreByTopic",label:"Article",reorder:true},
   {key:"allCategories",label:"All Categories",reorder:false}
 ];
 function neNewHomeDesign(name){
@@ -3170,7 +3242,7 @@ i("div",{id:"ne-hidden-google-btn",style:{position:"fixed",top:"-9999px",left:"-
     if(!l){if(window._neStartGoogleSignIn)window._neStartGoogleSignIn();else alert("Google Sign-In is still loading, please try again in a moment.");}else f({type:"admin"})
   },"aria-label":"Profile",title:l?(l.displayName||"Super Admin"):"Sign in",className:"w-9 h-9 rounded-[10px] ne-profile-placeholder shrink-0 overflow-hidden",style:{padding:0},children:l?(l.picture?i("img",{src:l.picture,alt:"","data-ne-admin-photo":"1",referrerPolicy:"no-referrer",className:"w-full h-full object-cover"}):i("div",{className:"w-full h-full flex items-center justify-center ne-dgreen-bg text-white font-bold text-[13px]",children:String(l.displayName||"A")[0].toUpperCase()})):null})
   ]})
-]}),neHdr.showSub&&i("div",{"data-ne-header-text":"1",className:"max-w-[1280px] mx-auto px-4",style:{width:"100%",paddingBottom:Math.max(6,neHdr.pad)+"px"},children:i("p",{style:neHdr.textStyle,className:"leading-snug "+(neHdr.textHasColor?"":"text-gray-600"),children:"Anyone can contribute by signing in with a Gmail account. Share your articles, history, local dialects, cultures, traditions, and knowledge from your community, and help preserve the rich heritage of Northeast India."})}),neSearchOpen&&i("div",{className:"max-w-[1280px] mx-auto px-4",style:{width:"100%",paddingBottom:"12px"},children:c("div",{className:"relative",children:[i(jr,{className:"absolute left-3.5 top-1/2 -translate-y-1/2 ne-dgreen-40",size:18}),i("input",{autoFocus:!0,value:d,onChange:(a)=>{if(y(a.target.value),a.target.value)f({type:"searchResults"})},placeholder:"Search Northeast Encyclopedia",className:"w-full h-11 pl-11 pr-4 rounded-full border ne-dgreen-border-15 bg-white focus:outline-none focus:ring-2 ne-dgreen-ring ne-dgreen-focus-border text-[15px] placeholder:text-gray-400 shadow-sm"}),d&&i("button",{onClick:()=>y(""),className:"absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-gray-100",children:i($n,{size:14})})]})}),]}),w&&c("div",{"data-ne-drawer":"1",className:"fixed inset-0 z-50 bg-white p-4 md:hidden overflow-y-auto",style:{display:"flex",flexDirection:"column"},children:[i("style",{children:"[data-ne-drawer] button.h-12{height:38px!important;font-size:14px!important}[data-ne-drawer] .space-y-4>:not([hidden])~:not([hidden]){margin-top:10px!important}[data-ne-drawer] button.h-12 img{width:18px!important;height:18px!important}"}),c("div",{className:"flex items-center gap-2 border-b border-gray-100",style:{marginBottom:"12px",paddingBottom:"12px"},children:[i("p",{className:"flex-1 text-[10px] leading-snug text-gray-500",children:"If Northeast Encyclopedia was helpful, please consider supporting us."}),i("button",{onClick:()=>{P(!1);f({type:"donate"})},style:{height:"24px",fontSize:"10.5px",...neHdr.donateStyle},className:"shrink-0 px-3 rounded-full font-bold "+(neHdr.donateHasColor?"":"ne-gold-btn"),children:"Donate"})]}),c("div",{className:"flex justify-between items-center mb-6",children:[c("div",{children:[i("span",{className:"font-bold ne-dgreen-text",children:"Menu"}),neContributor&&i("div",{className:"text-[11px] text-gray-500 mt-0.5",children:"Signed in as "+(neContributor.displayName||"Contributor")})]}),i("button",{onClick:()=>P(!1),className:"p-2 border rounded-full",children:i($n,{})})]}),c("div",{className:"space-y-4",children:[
+]}),neHdr.showSub&&i("div",{"data-ne-header-text":"1",className:"max-w-[1280px] mx-auto px-4",style:{width:"100%",paddingBottom:Math.max(6,neHdr.pad)+"px"},children:i("p",{style:neHdr.textStyle,className:"leading-snug "+(neHdr.textHasColor?"":"text-gray-600"),children:"Anyone can contribute by signing in with a Gmail account. Share your articles, history, local dialects, cultures, traditions, and knowledge from your community, and help preserve the rich heritage of Northeast India."})}),neSearchOpen&&i("div",{className:"max-w-[1280px] mx-auto px-4",style:{width:"100%",paddingBottom:"12px"},children:c("div",{className:"relative",children:[i(jr,{className:"absolute left-3.5 top-1/2 -translate-y-1/2 ne-dgreen-40",size:18}),i("input",{autoFocus:!0,value:d,onChange:(a)=>{if(y(a.target.value),a.target.value)f({type:"searchResults"})},placeholder:"Search Northeast Encyclopedia",className:"w-full h-11 pl-11 pr-4 rounded-full border ne-dgreen-border-15 bg-white focus:outline-none focus:ring-2 ne-dgreen-ring ne-dgreen-focus-border text-[15px] placeholder:text-gray-400 shadow-sm"}),d&&i("button",{onClick:()=>y(""),className:"absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-gray-100",children:i($n,{size:14})})]})}),]}),w&&c("div",{"data-ne-drawer":"1",className:"fixed inset-0 z-50 bg-white p-4 md:hidden overflow-y-auto",style:{display:"flex",flexDirection:"column"},children:[i("style",{children:"[data-ne-drawer] .space-y-4 button.h-12,[data-ne-drawer] [data-ne-install-menu]{background:transparent!important;color:#14532d!important;border:0!important;border-bottom:1px solid #edf2ee!important;border-radius:0!important;box-shadow:none!important;justify-content:flex-start!important;text-align:left!important;padding:0 4px!important;font-weight:600!important}[data-ne-drawer] .space-y-4 .relative>button.h-12{padding-left:22px!important;font-weight:500!important;color:#374151!important}[data-ne-drawer] .space-y-4>:not([hidden])~:not([hidden]){margin-top:0!important}[data-ne-drawer] [data-ne-alerts-menu]{width:100%;height:42px;background:transparent!important;border:0!important;border-bottom:1px solid #edf2ee!important;border-radius:0!important;justify-content:flex-start!important;padding:0 4px 0 22px!important;margin:0!important;font-weight:500!important;color:#374151!important;font-size:14px!important;text-align:left!important;gap:8px!important}[data-ne-drawer] [data-ne-alerts-menu]>span:first-child{font-size:15px!important}[data-ne-drawer] [data-ne-alerts-menu] [data-ne-alert-switch]{margin-left:auto!important}[data-ne-drawer] button.h-12{height:42px!important;font-size:14px!important}[data-ne-drawer] .space-y-4>:not([hidden])~:not([hidden]){margin-top:0!important}[data-ne-drawer] button.h-12 img{width:18px!important;height:18px!important}"}),c("div",{className:"flex items-center gap-2 border-b border-gray-100",style:{marginBottom:"12px",paddingBottom:"12px"},children:[i("p",{className:"flex-1 text-[10px] leading-snug text-gray-500",children:"If Northeast Encyclopedia was helpful, please consider supporting us."}),i("button",{onClick:()=>{P(!1);f({type:"donate"})},style:{height:"24px",fontSize:"10.5px",...neHdr.donateStyle},className:"shrink-0 px-3 rounded-full font-bold "+(neHdr.donateHasColor?"":"ne-gold-btn"),children:"Donate"})]}),c("div",{className:"flex justify-between items-center mb-6",children:[c("div",{children:[i("span",{className:"font-bold ne-dgreen-text",children:"Menu"}),neContributor&&i("div",{className:"text-[11px] text-gray-500 mt-0.5",children:"Signed in as "+(neContributor.displayName||"Contributor")})]}),i("button",{onClick:()=>P(!1),className:"p-2 border rounded-full",children:i($n,{})})]}),c("div",{className:"space-y-4",children:[
   i("button",{onClick:()=>{f({type:"home"}),P(!1)},className:"w-full h-12 rounded-full ne-dgreen-bg text-white font-semibold transition-colors",children:"Home"}),
   !neContributor&&i("button",{onClick:()=>{if(window._neStartGoogleSignIn)window._neStartGoogleSignIn();else alert("Google Sign-In is still loading, please try again in a moment.");P(!1)},className:"w-full h-12 rounded-full ne-dgreen-bg text-white font-semibold transition-colors",children:"Create Account"}),
 neContributor&&i("button",{onClick:()=>{setNeContributor(null);try{localStorage.removeItem("ne_contributor")}catch{};P(!1)},className:"w-full h-12 rounded-full ne-dgreen-bg text-white font-semibold transition-colors",children:"Logout (Contributor)"}),
@@ -3188,6 +3260,7 @@ neContributor&&i("button",{onClick:()=>{setNeContributor(null);try{localStorage.
     i("button",{onClick:()=>{setNeNavIconPanelOpen(!neNavIconPanelOpen),setNeFontPanelOpen(!1),setNeColourPanelOpen(!1)},className:"w-full h-12 rounded-full ne-dgreen-bg text-white font-semibold transition-colors",children:"Bottom Icons"}),
     neNavIconPanelOpen&&c("div",{style:{position:"absolute",top:"4px",right:"8px",zIndex:20},className:"bg-white border-2 ne-dgreen-border rounded-2xl p-2 flex flex-col gap-1.5 shadow-lg",children:["Small","Medium","Large"].map((sz)=>i("button",{onClick:()=>{neSetNavIconSize(sz),setNeNavIconPanelOpen(!1)},className:"h-9 px-4 rounded-full text-[12px] font-semibold whitespace-nowrap transition-colors "+(neNavIconSize===sz?"ne-dgreen-pill-active":"ne-dgreen-pill-inactive"),children:sz},sz))})
   ]}),
+  neSettingsOpen&&c("div",{"data-ne-settings-alerts":"1",children:neAlertMenuButton()}),
   neContributor&&i("button",{onClick:async()=>{
     V({type:"contributorDashboard"});P(!1);
     try{
@@ -3203,10 +3276,9 @@ neContributor&&i("button",{onClick:()=>{setNeContributor(null);try{localStorage.
   // (small fixed gap, so a long menu never ends flush against the divider line)
   neColorMode==="Dark"?null:i("div",{"aria-hidden":"true",style:{flex:"0 0 16px"}}),
   c("div",{"data-ne-install-menu-wrap":"1",style:neColorMode==="Dark"?{marginTop:"16px",backgroundColor:"inherit",paddingTop:"16px",paddingBottom:"16px",borderTop:"1px solid #e5e7eb"}:{marginTop:"auto",position:"sticky",bottom:"-16px",marginBottom:"-16px",backgroundColor:"inherit",paddingTop:"16px",paddingBottom:"16px",borderTop:"1px solid #e5e7eb"},children:[
-    neAlertMenuButton(),
     i("button",{"data-ne-install-menu":"1",onClick:()=>{P(!1);if(window.neInstallApp)window.neInstallApp("menu")},className:"w-full h-12 rounded-full ne-dgreen-bg text-white font-semibold transition-colors",style:{display:"flex",alignItems:"center",justifyContent:"center",gap:"8px"},children:[
-      i("img",{src:"/icon-192.png",alt:"",style:{width:"22px",height:"22px",borderRadius:"5px",display:"block"}}),
-      "Install App"
+      i("img",{src:"/icon-192.png",alt:"",style:{width:"18px",height:"18px",borderRadius:"4px",display:"block"}}),
+      i("span",{"data-ne-install-text":"1",style:{fontSize:"12px",fontWeight:600},children:"Install this app for a better experience"})
     ]})
   ]})
 ]}),neShowSuggest&&i("div",{style:{zIndex:9999},className:"fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4",children:c("div",{className:"bg-white rounded-[20px] w-full max-w-[420px] p-6 shadow-2xl",children:[
@@ -3526,7 +3598,7 @@ c("div",{className:"mt-10",children:[
     // the first HALF of the article, and "Read more" right under that half;
     // "Read more" opens the rest right there (no new page), "Show less" folds it.
     if(featVis&&featVis.categoryShape==="none"){
-      const neHalf=(t)=>{t=String(t||"").trim();if(t.length<=280)return t;const mid=Math.ceil(t.length/2);const se=t.slice(mid,mid+250).search(/[.!?।](\s|$)/);if(se>=0)return t.slice(0,mid+se+1)+" …";let cut=mid;const sp=t.slice(mid).search(/\s/);if(sp>=0&&sp<80)cut+=sp;return t.slice(0,cut).replace(/[\s,;:.\-]+$/,"")+"…"};
+      const neParas=(t)=>String(t||"").replace(/\r/g,"").split(/\n+/).map((x)=>x.trim()).filter(Boolean);const neHalf=(t)=>neParas(t)[0]||"";
       const neTitleCol=featFontColor&&featFontColor.color;
       return c("div",{"data-ne-featured-nobox":"1",className:"flex flex-col",children:featured.map((a,ix)=>c("article",{"data-ne-nobox-item":a.id,style:{padding:ix?"18px 0 14px":"4px 0 14px",borderTop:ix?"1px solid rgba(0,0,0,.10)":"none",background:"transparent"},children:[
         a.imageUrl&&i("img",{loading:"lazy",decoding:"async",src:a.imageUrl,alt:a.title||"",onClick:()=>Ut(a),style:{display:"block",width:"100%",height:"auto",maxHeight:"70vh",objectFit:"contain",cursor:"pointer",marginBottom:"10px",borderRadius:"10px"}}),
@@ -3534,7 +3606,7 @@ c("div",{className:"mt-10",children:[
         a.state&&i("div",{className:"text-[12px] text-gray-500 mt-1",children:a.state}),
         a.intro&&i("p",{className:"mt-2 text-[15px] font-semibold text-[#333] leading-relaxed",style:{overflowWrap:"anywhere"},children:a.intro}),
         a.content&&i("div",{"data-ne-half":"1","data-ne-full":neFeatOpen[a.id]?"1":"0",className:"mt-2 whitespace-pre-wrap leading-relaxed text-[15px] text-[#333]",style:{overflowWrap:"anywhere"},children:neFeatOpen[a.id]?String(a.content).trim():neHalf(a.content)}),
-        (neFeatOpen[a.id]||String(a.content||"").trim().length>280)&&i("button",{type:"button","data-ne-read-more":neFeatOpen[a.id]?"less":"more",onClick:()=>{const op=!neFeatOpen[a.id];setNeFeatOpen((m0)=>({...m0,[a.id]:op}));if(!op){setTimeout(()=>{try{const el=document.querySelector('[data-ne-nobox-item="'+a.id+'"]');if(el){const r=el.getBoundingClientRect();if(r.top<0)window.scrollTo(0,window.scrollY+r.top-90)}}catch(err){}},30)}},className:"font-bold ne-dgreen-text",style:{fontSize:"15px",lineHeight:1.3,background:"none",border:0,padding:"6px 0 0",cursor:"pointer"},children:neFeatOpen[a.id]?"Show less \u2039":"Read more \u203a"}),
+        (neFeatOpen[a.id]||neParas(a.content).length>1)&&i("button",{type:"button","data-ne-read-more":neFeatOpen[a.id]?"less":"more",onClick:()=>{const op=!neFeatOpen[a.id];setNeFeatOpen((m0)=>({...m0,[a.id]:op}));if(!op){setTimeout(()=>{try{const el=document.querySelector('[data-ne-nobox-item="'+a.id+'"]');if(el){const r=el.getBoundingClientRect();if(r.top<0)window.scrollTo(0,window.scrollY+r.top-90)}}catch(err){}},30)}},className:"font-bold ne-dgreen-text",style:{fontSize:"15px",lineHeight:1.3,background:"none",border:0,padding:"6px 0 0",cursor:"pointer"},children:neFeatOpen[a.id]?"Show less \u2039":"Read more \u203a"}),
         // Same details as the full article page: Article Info, then Like / Dislike / Comments / Download / Share.
         c("div",{"data-ne-feat-info":"1",className:"text-[12px] text-gray-600",style:{marginTop:"12px"},children:[
           i("p",{className:"font-bold text-[#1a237e]",children:"Article Info"}),
@@ -3568,64 +3640,88 @@ c("div",{className:"mt-10",children:[
     if(featVis&&featVis.categoryOrientation==="vertical"&&!featColsClass) return c("div",{className:"flex flex-col gap-3",children:cards});
     return c("div",{className:featGridUse.className+" gap-3",style:featGridUse.style,children:cards});
   })()
+]})]})),(neHomeSectionEnabled(neGetPublicHomeDesign(e.settings.publicHomeDesign),"exploreByTopic")&&c("div",{"data-ne-section":"articles",style:neHomeSectionOrderStyle(neGetPublicHomeDesign(e.settings.publicHomeDesign),"exploreByTopic"),children:[
+// Article section (replaces "Explore by Topic"; keeps its internal key "exploreByTopic"
+// so every Studio setting already saved for that slot carries over). Newest article
+// first. Studio > Design settings for "Article" all apply here:
+//   Box Shape None/unset -> reading list (picture, title, FIRST PARAGRAPH, Read more);
+//   Round/Oval/Rectangle/Square -> cards (picture, title, first paragraph, Read more ->);
+//   Size -> picture height (reading) or card size; Box Colour -> each article's box;
+//   Text Font Size/Colour/Family/Bold/Italic/Underline/Letter Spacing/Text Align -> title
+//   and text; Columns, Orientation, Box width/Position/Tall -> layout of the list.
+c("div",{className:"mt-10",children:[
+  c("div",{className:"flex items-center justify-between mb-3",style:{flexWrap:"wrap",columnGap:"8px"},children:[
+    (()=>{const t=neTitleStyle("exploreByTopicHeading");return i("h3",{"data-ne-articles-heading":"1",style:t.style,className:"text-[22px] font-bold "+(t.hasColor?"":"ne-dgreen-text"),children:"Article"});})(),
+    Ze&&i("span",{className:"text-[11px] text-gray-400",children:"Newest first"})
+  ]}),
+  (()=>{
+    const artDesign=neGetPublicHomeDesign(e.settings.publicHomeDesign);
+    const artVis=neSectionVisualDesign(artDesign,"exploreByTopic");
+    const artShapeVal=artVis&&typeof artVis.categoryShape==="string"?artVis.categoryShape:"";
+    const artCards=["round","oval","rectangle","square"].includes(artShapeVal);
+    const artShape=neSectionShapeStyle(artVis);
+    const artColor=neSectionColorStyle(artVis);
+    const artFont=neSectionFontSizeStyle(artVis);
+    const artFontColor=neSectionFontColorStyle(artVis);
+    const artExtra=neSectionFontExtraStyle(artVis);
+    const artOrient=neCategoryOrientationConfig(artVis);
+    const artM=neFeaturedCardMetrics(artVis);
+    const artSized=!!(artVis&&typeof artVis.categorySize==="string"&&artVis.categorySize);
+    const artCols=artVis&&typeof artVis.sectionColumns==="number"&&artVis.sectionColumns>=1&&artVis.sectionColumns<=6?Math.round(artVis.sectionColumns):0;
+    const artVertical=artVis&&artVis.categoryOrientation==="vertical";
+    const bodyPx=artFont.fontSize?parseFloat(artFont.fontSize):15;
+    const titlePx=artFont.fontSize?Math.round(bodyPx+5):(artSized?artM.title+6:20);
+    const titleStyle={fontSize:titlePx+"px",lineHeight:1.25,cursor:"pointer",...artExtra,...artFontColor};
+    const bodyStyle={fontSize:bodyPx+"px",lineHeight:1.65,overflowWrap:"anywhere",...(artFontColor.color?{color:artFontColor.color}:{}),...(artExtra.fontFamily?{fontFamily:artExtra.fontFamily}:{}),...(artExtra.fontStyle?{fontStyle:artExtra.fontStyle}:{}),...(artExtra.letterSpacing?{letterSpacing:artExtra.letterSpacing}:{}),...(artExtra.textAlign?{textAlign:artExtra.textAlign}:{})};
+    const titleCls="font-bold"+(artFontColor.color?"":" ne-dgreen-text");
+    const bodyCls=artFontColor.color?"":"text-[#333]";
+    // first paragraph of the text, and whether more paragraphs follow
+    const paras=(t)=>String(t||"").replace(/\r/g,"").split(/\n+/).map((x)=>x.trim()).filter(Boolean);
+    const all=(Array.isArray(e.articles)?e.articles.slice():[]).filter((a)=>a&&a.id&&a.title).sort((a,b)=>(Date.parse(b.createdAt||"")||0)-(Date.parse(a.createdAt||"")||0));
+    if(all.length===0) return c("div",{className:"p-8 rounded-2xl bg-gray-50 text-center",children:[i("div",{className:"text-gray-500 font-semibold",children:"No articles yet."}),i("div",{className:"text-gray-400 text-[13px] mt-1",children:"New articles appear here, newest on top."})]});
+    const shown=Math.max(5,Number(neFeatOpen.__artN)||5);
+    const list=all.slice(0,shown);
+    const k=(a)=>"art:"+a.id;
+    const imgMax=artSized?Math.round(artM.h*1.15)+"px":"60vh";
+    const boxed=!artCards&&artShapeVal!=="none"&&!!artColor.backgroundColor;
+    const itemW=artOrient?(artCards?(neSizeTileWidthPx(artVis,"featured")||230)+"px":"85vw"):undefined;
+    const readMore=(a,open)=>i("button",{type:"button","data-ne-read-more":open?"less":"more",onClick:()=>{const op=!open;setNeFeatOpen((m0)=>({...m0,[k(a)]:op}));if(!op){setTimeout(()=>{try{const el=document.querySelector('[data-ne-article-item="'+a.id+'"]');if(el){const r=el.getBoundingClientRect();if(r.top<0)window.scrollTo(0,window.scrollY+r.top-90)}}catch(err){}},30)}},className:"font-bold ne-dgreen-text",style:{fontSize:Math.max(13,bodyPx)+"px",lineHeight:1.3,background:"none",border:0,padding:"6px 0 0",cursor:"pointer"},children:open?"Show less ‹":"Read more ›"});
+    const items=list.map((a,ix)=>{
+      const p=paras(a.content);
+      const open=!!neFeatOpen[k(a)];
+      if(artCards){
+        // card: picture, title, first paragraph (clamped), Read more -> opens the article
+        const cs=neLockNoBoxBackground({minHeight:artM.h+"px",...artShape,...artColor,overflow:"hidden",...(artOrient?{flex:"0 0 auto",width:itemW,maxWidth:"85vw"}:{}),...(artShapeVal==="round"?{padding:"14% 12%"}:{})},artShapeVal);
+        return c("button",{key:a.id,type:"button","data-ne-article-item":a.id,"data-ne-article-card":"1",onClick:()=>Ut(a),style:cs,className:"text-left rounded-2xl border-2 ne-dgreen-border bg-white flex flex-col",children:[
+          a.imageUrl&&i("img",{loading:"lazy",decoding:"async",src:a.imageUrl,alt:a.title||"",style:{display:"block",width:"100%",height:"auto",maxHeight:Math.round(artM.h*0.5)+"px",objectFit:"cover",flexShrink:0}}),
+          c("div",{className:"p-3 flex-1 flex flex-col min-w-0",children:[
+            i("div",{style:{...titleStyle,fontSize:(artFont.fontSize?titlePx:artM.title+2)+"px"},className:titleCls,children:a.title}),
+            (a.intro||p[0])&&i("div",{style:{...bodyStyle,fontSize:(artFont.fontSize?bodyPx:artM.intro+1)+"px",lineHeight:1.45,display:"-webkit-box",WebkitBoxOrient:"vertical",WebkitLineClamp:Math.max(2,artM.introLines),overflow:"hidden",marginTop:"4px"},className:bodyCls,children:a.intro||p[0]}),
+            i("span",{className:"font-bold ne-dgreen-text",style:{fontSize:"13px",marginTop:"6px"},children:"Read more ›"})
+          ]})
+        ]});
+      }
+      // reading list: picture, title, intro, FIRST PARAGRAPH, Read more (opens the rest right here)
+      const st={padding:boxed?"14px":(ix?"18px 0 14px":"4px 0 14px"),borderTop:boxed||ix===0||artOrient||artCols>1?"none":"1px solid rgba(0,0,0,.10)",...(boxed?{background:artColor.backgroundColor,borderRadius:"14px"}:{background:"transparent"}),...(artOrient?{flex:"0 0 auto",width:itemW,maxWidth:"420px"}:{}),minWidth:0};
+      return c("article",{key:a.id,"data-ne-article-item":a.id,style:st,children:[
+        a.imageUrl&&i("img",{loading:"lazy",decoding:"async",src:a.imageUrl,alt:a.title||"",onClick:()=>Ut(a),style:{display:"block",width:"100%",height:"auto",maxHeight:imgMax,objectFit:"contain",cursor:"pointer",marginBottom:"10px",borderRadius:"10px"}}),
+        i("h4",{onClick:()=>Ut(a),style:titleStyle,className:titleCls,children:a.title}),
+        c("div",{className:"text-[12px] text-gray-500 mt-1",children:[a.state?a.state+" • ":"",a.createdAt?new Date(a.createdAt).toLocaleDateString():"",(a.authorName||(a.infobox&&a.infobox.isAnonymous))?" • "+((a.infobox&&a.infobox.isAnonymous)?"Anonymous Contributor":a.authorName):""]}),
+        a.intro&&i("p",{className:"mt-2 font-semibold "+bodyCls,style:bodyStyle,children:a.intro}),
+        p.length>0&&i("div",{"data-ne-article-text":open?"full":"first","data-ne-full":open?"1":"0",className:"mt-2 whitespace-pre-wrap "+bodyCls,style:bodyStyle,children:open?String(a.content).trim():p[0]}),
+        (open||p.length>1)&&readMore(a,open),
+        neEngagementBlock("article",a.id,{downloadText:a.title+"\n\n"+(a.intro||"")+"\n\n"+(a.content||""),downloadName:(a.slug||a.title||"article")+".txt",shareTitle:a.title,shareUrl:typeof window!=="undefined"?window.location.origin+"/?article="+a.id:""})
+      ]});
+    });
+    const more=all.length>list.length&&i("button",{type:"button","data-ne-articles-more":"1",onClick:()=>setNeFeatOpen((m0)=>({...m0,__artN:shown+5})),className:"mt-4 w-full h-11 rounded-full border-2 ne-dgreen-border ne-dgreen-text font-semibold text-[14px]",children:"Show more articles ("+(all.length-list.length)+")"});
+    let box;
+    if(artOrient) box=c("div",{"data-ne-articles":"swipe",style:{...artOrient.containerStyle,gap:"12px"},className:artOrient.containerClassName,children:items});
+    else if(artCols>0||(artCards&&!artVertical)) { const g=artCols>0?{className:"ne-rg",style:{"--ne-m":artCols,"--ne-d":artCols}}:neGridSpec(artVis,"featured",2,4); box=c("div",{"data-ne-articles":"grid",className:g.className+" gap-3",style:g.style,children:items}); }
+    else box=c("div",{"data-ne-articles":"list",className:"flex flex-col"+(boxed||artCards?" gap-3":""),children:items});
+    return c("div",{children:[box,more]});
+  })()
 ]})]}))]}),
-c("div",{className:"mt-10 grid md:grid-cols-12 gap-4",children:[c("div",{className:"md:col-span-8 min-w-0",children:[neHomeSectionEnabled(neGetPublicHomeDesign(e.settings.publicHomeDesign),"exploreByTopic")&&(()=>{
-  const nedesign=neGetPublicHomeDesign(e.settings.publicHomeDesign);
-  // Round 5: Explore by Topic's OWN shape/size/orientation, independent from
-  // Quick Categories Grid and All Categories (falls back to the old shared
-  // fields when unset, same as every other section).
-  const nedesignVis=neSectionVisualDesign(nedesign,"exploreByTopic");
-  // Round 6: Font Size / Colour must ALSO route through the styled render
-  // path even when Shape/Size/Orientation are all still None — otherwise
-  // (bug fix) setting only Colour or only Font Size for this section would
-  // silently do nothing, because the unstyled branch below never applies
-  // any inline style at all.
-  const neFontSizeOv=neSectionFontSizeStyle(nedesignVis);
-  const neColorOv=neSectionColorStyle(nedesignVis);
-  const neFontColorOv=neSectionFontColorStyle(nedesignVis);
-  // Round 9: Font Family/Bold/Italic/Underline/Letter Spacing/Text Align +
-  // Columns must ALSO route through the styled render path on their own,
-  // same reasoning as Font Size/Colour/Font Colour above.
-  const neFontExtraOv=neSectionFontExtraStyle(nedesignVis);
-  const neColsClassOv=neSectionColumnsClass(nedesignVis);
-  const neExploreGrid=neGridSpec(nedesignVis,"tile",2,4);
-  const nevisual=neCategoryVisualActive(nedesignVis)||Object.keys(neFontSizeOv).length>0||Object.keys(neColorOv).length>0||Object.keys(neFontColorOv).length>0||Object.keys(neFontExtraOv).length>0||neColsClassOv!=="";
-  const netopics=[{label:"Tribes & Communities",icon:In,count:e.articles.filter((a)=>Array.isArray(a.categories)&&a.categories.includes("Tribes & Communities")).length,action:()=>f({type:"category",data:{name:"Tribes & Communities"}})},{label:"Tribal Dictionary",icon:Rn,count:e.articles.filter((a)=>Array.isArray(a.categories)&&a.categories.includes("Tribal Dictionary")).length,action:()=>f({type:"category",data:{name:"Tribal Dictionary"}})},{label:"History & Heritage",icon:bn,count:e.articles.filter((a)=>Array.isArray(a.categories)&&a.categories.includes("History & Heritage")).length,action:()=>f({type:"category",data:{name:"History & Heritage"}})},{label:"Culture & Traditions",icon:Ar,count:e.articles.filter((a)=>Array.isArray(a.categories)&&a.categories.includes("Culture & Traditions")).length,action:()=>f({type:"category",data:{name:"Culture & Traditions"}})},{label:"People of Northeast India",icon:Ft,count:e.articles.filter((a)=>Array.isArray(a.categories)&&a.categories.includes("People of Northeast India")).length,action:()=>f({type:"category",data:{name:"People of Northeast India"}})},{label:"Tourist Spots & Places",icon:Ht,count:e.articles.filter((a)=>Array.isArray(a.categories)&&a.categories.includes("Tourist Spots & Places")).length,action:()=>f({type:"category",data:{name:"Tourist Spots & Places"}})},{label:"Stories & Oral Traditions",icon:ln,count:e.articles.filter((a)=>Array.isArray(a.categories)&&a.categories.includes("Stories & Oral Traditions")).length,action:()=>f({type:"category",data:{name:"Stories & Oral Traditions"}})},{label:"Food & Cuisine",icon:Mn,count:e.articles.filter((a)=>Array.isArray(a.categories)&&a.categories.includes("Food & Cuisine")).length,action:()=>f({type:"category",data:{name:"Food & Cuisine"}})}];
-  const neFitE=neFitState(nedesign,"exploreByTopic",nedesignVis);
-  const neFitEL=neFitLongest(netopics.map((a)=>a.label),7);
-  if(!nevisual){
-    return c("div",{style:neSectionBoxStyle(nedesign,"exploreByTopic"),children:[(()=>{const t=neTitleStyle("exploreByTopicHeading");return i("h3",{style:t.style,className:"text-[22px] font-bold "+(t.hasColor?"":"text-[#1a237e]"),children:"Explore by Topic"});})(),i("div",{className:"mt-3 grid grid-cols-2 md:grid-cols-4 gap-3",children:netopics.map((a)=>c("button",{onClick:a.action,style:neFitE.on?{containerType:"inline-size",padding:"min(16px, 8%)"}:undefined,className:"text-left rounded-2xl border border-gray-200 bg-white p-4 hover:shadow-md hover:border-[#1a237e]/20",children:[i(a.icon,{size:20,className:"text-[#1a237e]"}),i("div",{style:neFitE.text?{fontSize:neFitFontQC(neFitEL,"100cqi",14),hyphens:"auto"}:undefined,className:"mt-2 font-bold text-[14px] leading-tight",children:a.label}),c("div",{style:neFitE.text?{fontSize:neFitFontQC(neFitEL,"85cqi",12)}:undefined,className:"text-[12px] text-gray-500",children:[a.count," entries"]})]},a.label))})]});
-  }
-  const nev=neCategoryCardVisualStyle(nedesignVis);
-  // Round 6: Font Size and Colour, additive on top of Round 5's shape/size/
-  // orientation (same "exploreByTopic" section scope). Round 8d: Font
-  // Colour added the same way, and neLockNoBoxBackground makes "No Box"
-  // win over Colour permanently, same as every other section.
-  const neFitEBox=neFitE.on&&(!nev.orient||!!neSizeTileWidthPx(nedesignVis,"tile"));
-  const neFitEShape=nedesignVis&&nedesignVis.categoryShape;
-  const neFitEPad=!neFitEBox?{}:(neFitEShape==="round"?{padding:"20% 14%"}:neFitEShape==="oval"?{padding:"16% 12%"}:{padding:"min(16px, 8%)"});
-  const neFitECenter=neFitEBox&&(neFitEShape==="round"||neFitEShape==="oval")?{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center"}:{};
-  const nevStyle=neLockNoBoxBackground({...nev.style,...neFontSizeOv,...neColorOv,...neFontColorOv,...neFontExtraOv,...(neFitEBox?{containerType:"inline-size"}:{}),...neFitEPad,...neFitECenter},nedesignVis&&nedesignVis.categoryShape);
-  const neFillE=neFitEBox&&(!!nev.style.minHeight||!!nev.style.aspectRatio);
-  if(neFillE){ if(nev.style.minHeight){ nevStyle.height=nev.style.minHeight; if(neFitEShape==="round"||neFitEShape==="oval"){ const neTH=parseFloat(nev.style.minHeight)||96; nevStyle.paddingTop=nevStyle.paddingBottom=Math.round(neTH*(neFitEShape==="round"?0.16:0.12))+"px"; } } nevStyle.minHeight=0; nevStyle.overflow="hidden"; nevStyle.display="flex"; nevStyle.flexDirection="column"; nevStyle.justifyContent="center"; delete nevStyle.alignItems; }
-  const neFitEFont=neFillE?undefined:(neFitEBox&&neFitE.text?{fontSize:neFitFontQC(neFitEL,"100cqi",22),hyphens:"auto"}:undefined);
-  const neFitECount=neFillE?undefined:(neFitEBox&&neFitE.text?{fontSize:neFitFontQC(neFitEL,"85cqi",19)}:undefined);
-  // Round 8: drop the static border/bg-white/hover-border look whenever a
-  // background override is active (Colour OR Shape="none") -- otherwise a
-  // custom Colour would show through a visible white-ish border ring, and
-  // "No Box" would still leave a border behind despite the background
-  // itself going transparent.
-  const nevClassName=(nevStyle.backgroundColor?"text-left rounded-2xl p-4":"text-left rounded-2xl border border-gray-200 bg-white p-4 hover:shadow-md hover:border-[#1a237e]/20");
-  const netiles=netopics.map((a)=>{const kids=[i(a.icon,{size:20,className:"text-[#1a237e]"}),i("div",{style:neFitEFont,className:"mt-2 font-bold leading-tight",children:a.label}),c("div",{style:neFitECount,className:"text-gray-500",children:[a.count," entries"]})];
-    if(neFillE) return i("button",{key:a.label,onClick:a.action,style:nevStyle,className:nevClassName,"data-ne-fill":"explore","data-ne-fill-group":"explore","data-ne-fill-max":neFitE.text?"8":"1",children:c("div",{style:neFitECenter.alignItems?{display:"flex",flexDirection:"column",alignItems:"center",textAlign:"center"}:undefined,children:kids})});
-    return c("button",{key:a.label,onClick:a.action,style:nevStyle,className:nevClassName,children:kids});});
-  const neExploreGridUse=neExploreGrid;
-  return c("div",{style:neSectionBoxStyle(nedesign,"exploreByTopic"),children:[(()=>{const t=neTitleStyle("exploreByTopicHeading");return i("h3",{style:t.style,className:"text-[22px] font-bold "+(t.hasColor?"":"text-[#1a237e]"),children:"Explore by Topic"});})(),
-    nev.orient
-      ? c("div",{style:nev.orient.containerStyle,className:"mt-3 "+nev.orient.containerClassName,children:netiles})
-      : c("div",{className:"mt-3 "+neExploreGridUse.className+" gap-3",style:neExploreGridUse.style,children:netiles})
-  ]});
-})(),neHomeSectionEnabled(neGetPublicHomeDesign(e.settings.publicHomeDesign),"allCategories")&&(()=>{
+c("div",{className:"mt-10 grid md:grid-cols-12 gap-4",children:[c("div",{className:"md:col-span-8 min-w-0",children:[null,neHomeSectionEnabled(neGetPublicHomeDesign(e.settings.publicHomeDesign),"allCategories")&&(()=>{
   const nedesign2=neGetPublicHomeDesign(e.settings.publicHomeDesign);
   // Round 5: All Categories' OWN shape/size/orientation, independent from
   // Quick Categories Grid and Explore by Topic (falls back to the old shared
@@ -3954,12 +4050,58 @@ o.type==="addStory"&&c("div",{className:"p-6 bg-white rounded-[20px] border max-
   (neContributor&&!l)&&c("label",{className:"flex items-center gap-2 text-[13px] font-medium",children:[i("input",{type:"checkbox",checked:!!s.isAnonymous,onChange:(a)=>p({...s,isAnonymous:a.target.checked}),style:{width:"16px",height:"16px"}}),"Post anonymously"]}),
   c("div",{className:"flex gap-2",children:[i("button",{onClick:xiStory,className:"h-11 px-6 rounded-xl bg-[#1a237e] text-white font-bold",children:"Save & Publish"}),i("button",{onClick:()=>{p({});f({type:"storyList"})},className:"h-11 px-6 rounded-xl border border-gray-200 font-semibold",children:"Cancel"})]})
 ]})]}),
-o.type==="dictionary"&&c("div",{children:[c("div",{className:"flex items-start justify-between gap-3",children:[c("div",{className:"min-w-0",children:[i("h1",{className:"text-[22px] font-bold text-[#1a237e] leading-tight",children:"Northeast Dictionary"}),i("p",{className:"text-[12px] text-gray-600 mt-0.5",children:"Search by word, meaning, language, tribe, state."})]}),i("button",{onClick:neAddWord,style:{height:"28px",whiteSpace:"nowrap"},className:"shrink-0 mt-0.5 px-3 rounded-full ne-dgreen-bg text-white text-[11px] font-semibold",children:"➕ Add Word"})]}),c("div",{className:"mt-4 relative max-w-[520px]",children:[i(jr,{className:"absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400",size:18}),i("input",{value:neDictSearch,onChange:(a)=>setNeDictSearch(a.target.value),placeholder:"🔍 Search Dictionary (word, meaning, language...)",className:"w-full h-11 pl-11 pr-4 rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a237e]/20 focus:border-[#1a237e] text-[15px]"}),neDictSearch&&i("button",{onClick:()=>setNeDictSearch(""),className:"absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-gray-100",children:i($n,{size:14})})]}),c("div",{className:"mt-4 grid md:grid-cols-[1fr_300px] gap-6",children:[i("div",{children:c("div",{className:"grid gap-3 mt-4",children:[e.dict.filter((a)=>!neDictSearch||a.word.toLowerCase().includes(neDictSearch.toLowerCase())||a.meaning.toLowerCase().includes(neDictSearch.toLowerCase())||a.language.toLowerCase().includes(neDictSearch.toLowerCase())||(a.tribe||"").toLowerCase().includes(neDictSearch.toLowerCase())||(a.state||"").toLowerCase().includes(neDictSearch.toLowerCase())).length===0&&i("div",{className:"p-6 rounded-xl bg-gray-50 text-center text-gray-500 text-sm",children:neDictSearch?"No dictionary entries match your search.":"No dictionary entries yet."}),e.dict.filter((a)=>!neDictSearch||a.word.toLowerCase().includes(neDictSearch.toLowerCase())||a.meaning.toLowerCase().includes(neDictSearch.toLowerCase())||a.language.toLowerCase().includes(neDictSearch.toLowerCase())||(a.tribe||"").toLowerCase().includes(neDictSearch.toLowerCase())||(a.state||"").toLowerCase().includes(neDictSearch.toLowerCase())).map((a)=>c("div",{className:"p-4 rounded-xl border bg-white flex justify-between gap-4",children:[c("div",{children:[c("div",{className:"font-bold text-[#1a237e] text-[16px]",children:[a.word," ",c("span",{className:"text-gray-400 font-normal text-[12px]",children:["/",a.pronunciation,"/"]})]}),i("div",{className:"text-[14px] mt-1",children:a.meaning}),c("div",{className:"text-[12px] text-gray-500 mt-1",children:[a.language," • ",a.tribe," • ",a.state]}),c("div",{className:"text-[12px] text-gray-600 mt-2 italic",children:["Ex: ",a.example]}),(Ze||(neContributor&&a.contributor===neContributor.id))&&c("div",{className:"flex gap-2 mt-2",children:[i("button",{onClick:()=>{p({id:a.id,word:a.word,language:a.language,tribe:a.tribe,state:a.state,meaning:a.meaning,example:a.example,pronunciation:a.pronunciation,altSpelling:a.altSpelling,source:a.source,contributor:a.contributor,dateAdded:a.dateAdded}),f({type:"addWord"})},className:"text-[11px] px-3 py-1.5 rounded-full border ne-dgreen-border ne-dgreen-text font-semibold",children:"Edit"}),i("button",{onClick:async()=>{if(!confirm('Delete "'+a.word+'"? This cannot be undone.'))return;try{let token=l?localStorage.getItem("ne_auth_token"):(neContributor?neContributor.token:null);let res=await fetch("/api/d1/delete-dictionary",{method:"POST",headers:{"Content-Type":"application/json",...(token?{"Authorization":"Bearer "+token}:{})},credentials:"include",body:JSON.stringify({id:a.id})});let d=await res.json().catch(()=>({}));if(!res.ok||d.success===false){alert("Could not delete: "+(d.error||res.status));return}n((ye)=>({...ye,dict:ye.dict.filter((w)=>w.id!==a.id)}));}catch(err){alert("Network error \u2014 could not reach the server. Nothing was deleted.")}},className:"text-[11px] px-3 py-1.5 rounded-full border border-red-300 text-red-600 font-semibold",children:"Remove"})]}),neEngagementBlock("word",a.id,{downloadText:a.word+"\n\n"+a.meaning+(a.example?"\n\nExample: "+a.example:""),downloadName:(a.word||"word")+".txt",shareTitle:a.word,shareUrl:typeof window!=="undefined"?window.location.origin+"/?word="+a.id:""})]}),c("div",{className:"text-[10px] text-gray-400 text-right",children:["By ",a.isAnonymous?"Anonymous Contributor":(a.source||a.contributor),i("br",{}),new Date(a.dateAdded).toLocaleDateString(),
-                // Issue-1 correction pass: same Super-Admin-only reveal as
-                // Manage Articles. realAuthorName only ever arrives already
-                // verified SUPER_ADMIN server-side (neProjectContentRow).
-                Ze&&a.realAuthorName&&c("div",{className:"text-amber-700 font-medium mt-1",children:["Real Contributor: ",a.realAuthorName]})
-              ]})]},a.id))]})}),c("div",{className:"space-y-4",children:[an("AD_SIDEBAR")]})]})]}),o.type==="storyList"&&c("div",{children:[i("h1",{className:"text-[32px] font-bold text-[#1a237e]",children:"Stories"}),i("p",{className:"text-gray-600",children:"Distinguishing historical fact, oral history, community story, personal account."}),c("div",{className:"mt-4 relative max-w-[520px]",children:[i(jr,{className:"absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400",size:18}),i("input",{value:neStorySearch,onChange:(a)=>setNeStorySearch(a.target.value),placeholder:"🔍 Search Stories (title)",className:"w-full h-11 pl-11 pr-4 rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a237e]/20 focus:border-[#1a237e] text-[15px]"}),neStorySearch&&i("button",{onClick:()=>setNeStorySearch(""),className:"absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-gray-100",children:i($n,{size:14})})]}),(o.data&&o.data.neHomeVerifiedOnly?e.stories.filter((s)=>s.verified):e.stories).filter((a)=>!neStorySearch||(a.title||"").toLowerCase().includes(neStorySearch.toLowerCase())).length===0&&i("div",{className:"mt-6 p-6 rounded-xl bg-gray-50 text-center text-gray-500 text-sm",children:neStorySearch?"No stories match your search.":"No stories yet."}),i("div",{className:"mt-6 grid md:grid-cols-2 gap-4",children:(o.data&&o.data.neHomeVerifiedOnly?e.stories.filter((s)=>s.verified):e.stories).filter((a)=>!neStorySearch||(a.title||"").toLowerCase().includes(neStorySearch.toLowerCase())).map((a)=>c("div",{className:"p-5 rounded-xl border bg-white",children:[c("div",{className:"flex gap-2",children:[a.type&&i("span",{className:`text-[10px] px-2 py-0.5 rounded-full font-bold ${a.type==="historical"?"bg-[#1a237e] text-white":a.type==="oral"?"bg-amber-100 text-amber-800":"bg-gray-100"}`,children:a.type.toUpperCase()}),(a.tribe||a.location||a.state)&&c("span",{className:"text-[11px] text-gray-500",children:[a.tribe,a.tribe&&(a.location||a.state)?" • ":"",a.location||a.state]})]}),i("div",{className:"font-bold mt-2",children:a.title}),i("div",{className:"text-[13px] text-gray-600 mt-2 line-clamp-4",children:a.content}),c("div",{className:"text-[11px] text-gray-400 mt-3",children:[a.period,a.period?" • ":"","By ",a.isAnonymous?"Anonymous Contributor":(a.author||a.authorName),
+o.type==="dictionary"&&(()=>{
+  // Dictionary like a real dictionary: an A-Z list of words only; tap a word for its own page
+  // (meaning, examples, details and who added it). The word's contributor and Super Admin can
+  // edit or delete it. New words take their alphabetical place automatically.
+  const q=(neDictSearch||"").trim().toLowerCase();
+  const words=(e.dict||[]).filter((a)=>a&&a.word).filter((a)=>!q||[a.word,a.meaning,a.language,a.tribe,a.state,a.altSpelling].some((v)=>String(v||"").toLowerCase().includes(q))).sort((x,y)=>String(x.word).trim().localeCompare(String(y.word).trim(),undefined,{sensitivity:"base"}));
+  const openId=o.data&&o.data.wordId;
+  const cur=openId?(e.dict||[]).find((w)=>w&&w.id===openId):null;
+  const canEdit=(a)=>Ze||(neContributor&&a.contributor===neContributor.id);
+  const letterOf=(w)=>{const ch=String(w||"").trim().charAt(0).normalize("NFD").replace(/[̀-ͯ]/g,"").toUpperCase();return /^[A-Z]$/.test(ch)?ch:"#"};
+  const openWord=(a)=>{f({type:"dictionary",data:{wordId:a.id}});setTimeout(()=>{try{window.scrollTo(0,0)}catch(err){}},30)};
+  const editWord=(a)=>{p({id:a.id,word:a.word,language:a.language,tribe:a.tribe,state:a.state,meaning:a.meaning,example:a.example,pronunciation:a.pronunciation,altSpelling:a.altSpelling,source:a.source,contributor:a.contributor,dateAdded:a.dateAdded}),f({type:"addWord"})};
+  const deleteWord=async(a)=>{if(!confirm('Delete "'+a.word+'"? This cannot be undone.'))return;try{let token=l?localStorage.getItem("ne_auth_token"):(neContributor?neContributor.token:null);let res=await fetch("/api/d1/delete-dictionary",{method:"POST",headers:{"Content-Type":"application/json",...(token?{"Authorization":"Bearer "+token}:{})},credentials:"include",body:JSON.stringify({id:a.id})});let d=await res.json().catch(()=>({}));if(!res.ok||d.success===false){alert("Could not delete: "+(d.error||res.status));return}n((ye)=>({...ye,dict:ye.dict.filter((w)=>w.id!==a.id)}));f({type:"dictionary"});}catch(err){alert("Network error — could not reach the server. Nothing was deleted.")}};
+  if(openId){
+    if(!cur) return c("div",{"data-ne-dict-word":"missing",className:"p-6 rounded-xl bg-gray-50 text-center text-gray-500",children:["This word is no longer in the dictionary. ",i("button",{onClick:()=>f({type:"dictionary"}),className:"font-semibold ne-dgreen-text underline",children:"See all words"})]});
+    const a=cur;
+    const who=a.isAnonymous?"Anonymous Contributor":(a.source||a.contributorName||a.contributor||"—");
+    const row=(label,val)=>val?c("div",{className:"mt-4",children:[i("div",{className:"text-[11px] font-bold uppercase tracking-wide text-gray-400",children:label}),i("div",{className:"text-[15px] mt-1 leading-relaxed",style:{overflowWrap:"anywhere"},children:val})]}):null;
+    const examples=String(a.example||"").split(/\n+/).map((x)=>x.trim()).filter(Boolean);
+    return c("div",{"data-ne-dict-word":a.id,className:"max-w-[680px]",children:[
+      i("button",{"data-ne-dict-back":"1",onClick:()=>{try{if(history.state&&history.state.type==="dictionary"&&history.state.data&&history.state.data.wordId){history.back();return}}catch(err){}f({type:"dictionary"})},className:"text-[13px] font-semibold ne-dgreen-text",children:"‹ All words"}),
+      c("div",{className:"mt-3 p-5 rounded-2xl border bg-white",children:[
+        c("div",{className:"flex items-baseline gap-2 flex-wrap",children:[i("h1",{className:"text-[28px] font-bold text-[#1a237e] leading-tight",children:a.word}),a.pronunciation&&i("span",{className:"text-gray-400 text-[14px]",children:"/"+a.pronunciation+"/"})]}),
+        c("div",{className:"text-[12px] text-gray-500 mt-1",children:[a.language,a.tribe&&a.tribe!==a.language?" • "+a.tribe:"",a.state?" • "+a.state:""]}),
+        row("Meaning",a.meaning),
+        examples.length?c("div",{className:"mt-4",children:[i("div",{className:"text-[11px] font-bold uppercase tracking-wide text-gray-400",children:examples.length>1?"Examples":"Example"}),...examples.map((ex,k)=>i("div",{key:k,className:"text-[15px] mt-1 italic text-gray-700",style:{overflowWrap:"anywhere"},children:"“"+ex+"”"}))]}):null,
+        row("Other spellings",a.altSpelling),
+        c("div",{"data-ne-dict-by":"1",className:"mt-5 pt-3 border-t text-[12px] text-gray-500",children:["Added by ",i("b",{className:"text-gray-700",children:who}),a.dateAdded?" on "+new Date(a.dateAdded).toLocaleDateString():"",Ze&&a.realAuthorName&&c("div",{className:"text-amber-700 font-medium mt-1",children:["Real Contributor: ",a.realAuthorName]})]}),
+        canEdit(a)&&c("div",{className:"flex gap-2 mt-3",children:[
+          i("button",{"data-ne-dict-edit":"1",onClick:()=>editWord(a),className:"text-[12px] px-4 py-2 rounded-full border ne-dgreen-border ne-dgreen-text font-semibold",children:"Edit"}),
+          i("button",{"data-ne-dict-delete":"1",onClick:()=>deleteWord(a),className:"text-[12px] px-4 py-2 rounded-full border border-red-300 text-red-600 font-semibold",children:"Delete"})]}),
+        neEngagementBlock("word",a.id,{downloadText:a.word+"\n\n"+a.meaning+(a.example?"\n\nExample: "+a.example:""),downloadName:(a.word||"word")+".txt",shareTitle:a.word,shareUrl:typeof window!=="undefined"?window.location.origin+"/?word="+a.id:""})
+      ]})
+    ]});
+  }
+  const groups=[];words.forEach((a)=>{const L0=letterOf(a.word);let g0=groups[groups.length-1];if(!g0||g0.L!==L0){g0={L:L0,items:[]};groups.push(g0)}g0.items.push(a)});
+  const have=new Set(groups.map((g0)=>g0.L));
+  const jump=(L0)=>{try{const el=document.querySelector('[data-ne-dict-letter="'+L0+'"]');if(el)window.scrollTo(0,window.scrollY+el.getBoundingClientRect().top-80)}catch(err){}};
+  return c("div",{"data-ne-dict-list":"1",children:[
+    c("div",{className:"flex items-start justify-between gap-3",children:[c("div",{className:"min-w-0",children:[i("h1",{className:"text-[22px] font-bold text-[#1a237e] leading-tight",children:"Northeast Dictionary"}),i("p",{className:"text-[12px] text-gray-600 mt-0.5",children:(e.dict||[]).length+" words, A to Z. Tap a word to see its meaning."})]}),i("button",{onClick:neAddWord,style:{height:"28px",whiteSpace:"nowrap"},className:"shrink-0 mt-0.5 px-3 rounded-full ne-dgreen-bg text-white text-[11px] font-semibold",children:"➕ Add Word"})]}),
+    c("div",{className:"mt-4 relative max-w-[520px]",children:[i(jr,{className:"absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400",size:18}),i("input",{value:neDictSearch,onChange:(a)=>setNeDictSearch(a.target.value),placeholder:"Search a word or meaning",className:"w-full h-11 pl-11 pr-4 rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a237e]/20 focus:border-[#1a237e] text-[15px]"}),neDictSearch&&i("button",{onClick:()=>setNeDictSearch(""),className:"absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-gray-100",children:i($n,{size:14})})]}),
+    words.length>0&&i("div",{"data-ne-dict-az":"1",className:"mt-3",style:{display:"flex",flexWrap:"wrap",gap:"4px"},children:"ABCDEFGHIJKLMNOPQRSTUVWXYZ#".split("").map((L0)=>i("button",{key:L0,type:"button",disabled:!have.has(L0),onClick:()=>jump(L0),style:{width:"26px",height:"26px",borderRadius:"6px",fontSize:"12px",fontWeight:700,border:"1px solid "+(have.has(L0)?"#14532d":"#e5e7eb"),color:have.has(L0)?"#14532d":"#d1d5db",background:"#fff"},children:L0}))}),
+    c("div",{className:"mt-4 grid md:grid-cols-[1fr_300px] gap-6",children:[
+      words.length===0?i("div",{className:"p-6 rounded-xl bg-gray-50 text-center text-gray-500 text-sm",children:q?"No words match your search.":"No dictionary words yet."}):
+      i("div",{children:groups.map((g0)=>c("div",{key:g0.L,"data-ne-dict-letter":g0.L,className:"mb-4",children:[
+        i("div",{className:"text-[18px] font-bold ne-dgreen-text border-b",style:{paddingBottom:"4px",marginBottom:"2px"},children:g0.L}),
+        ...g0.items.map((a)=>i("button",{key:a.id,type:"button","data-ne-dict-item":a.id,onClick:()=>openWord(a),className:"w-full text-left border-b border-gray-100",style:{padding:"11px 2px",fontSize:"16px",fontWeight:600,color:"#1a237e",background:"none",display:"block"},children:a.word}))
+      ]}))}),
+      c("div",{className:"space-y-4",children:[an("AD_SIDEBAR")]})
+    ]})
+  ]});
+})(),o.type==="storyList"&&c("div",{children:[i("h1",{className:"text-[32px] font-bold text-[#1a237e]",children:"Stories"}),i("p",{className:"text-gray-600",children:"Distinguishing historical fact, oral history, community story, personal account."}),c("div",{className:"mt-4 relative max-w-[520px]",children:[i(jr,{className:"absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400",size:18}),i("input",{value:neStorySearch,onChange:(a)=>setNeStorySearch(a.target.value),placeholder:"🔍 Search Stories (title)",className:"w-full h-11 pl-11 pr-4 rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a237e]/20 focus:border-[#1a237e] text-[15px]"}),neStorySearch&&i("button",{onClick:()=>setNeStorySearch(""),className:"absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-gray-100",children:i($n,{size:14})})]}),(o.data&&o.data.neHomeVerifiedOnly?e.stories.filter((s)=>s.verified):e.stories).filter((a)=>!neStorySearch||(a.title||"").toLowerCase().includes(neStorySearch.toLowerCase())).length===0&&i("div",{className:"mt-6 p-6 rounded-xl bg-gray-50 text-center text-gray-500 text-sm",children:neStorySearch?"No stories match your search.":"No stories yet."}),i("div",{className:"mt-6 grid md:grid-cols-2 gap-4",children:(o.data&&o.data.neHomeVerifiedOnly?e.stories.filter((s)=>s.verified):e.stories).filter((a)=>!neStorySearch||(a.title||"").toLowerCase().includes(neStorySearch.toLowerCase())).map((a)=>c("div",{className:"p-5 rounded-xl border bg-white",children:[c("div",{className:"flex gap-2",children:[a.type&&i("span",{className:`text-[10px] px-2 py-0.5 rounded-full font-bold ${a.type==="historical"?"bg-[#1a237e] text-white":a.type==="oral"?"bg-amber-100 text-amber-800":"bg-gray-100"}`,children:a.type.toUpperCase()}),(a.tribe||a.location||a.state)&&c("span",{className:"text-[11px] text-gray-500",children:[a.tribe,a.tribe&&(a.location||a.state)?" • ":"",a.location||a.state]})]}),i("div",{className:"font-bold mt-2",children:a.title}),i("div",{className:"text-[13px] text-gray-600 mt-2 line-clamp-4",children:a.content}),c("div",{className:"text-[11px] text-gray-400 mt-3",children:[a.period,a.period?" • ":"","By ",a.isAnonymous?"Anonymous Contributor":(a.author||a.authorName),
           // Issue-1 correction pass: same Super-Admin-only reveal as Manage
           // Articles/Dictionary. realAuthorName only ever arrives already
           // verified SUPER_ADMIN server-side (neProjectContentRow).
@@ -3985,13 +4127,13 @@ c("div",{className:"mt-8 text-left",children:[
   i("button",{onClick:bi,className:"mt-5 w-full h-14 rounded-xl bg-[#ff6f00] text-white font-bold text-[16px] hover:bg-[#e65100]",children:T==="processing"?"Processing...":"DONATE"}),
   c("div",{className:"mt-4 p-3 rounded-lg bg-white border text-[12px]",children:[i("p",{className:"font-bold",children:"UPI Payment (Direct):"}),c("p",{className:"mt-1",children:["UPI ID: ",i("span",{className:"font-mono font-bold",children:"benjaminyanthan48-2@okaxis"})]}),i("a",{href:`upi://pay?pa=benjaminyanthan48-2@okaxis&pn=BENJAMIN%20YANTHAN&am=${k||""}&cu=INR`,className:"mt-2 inline-flex h-9 px-4 rounded-full bg-[#1a237e] text-white items-center gap-2 text-[12px] font-bold",children:"Open UPI App with Amount"}),i("p",{className:"mt-2 text-[11px] text-gray-500",children:"Secure via your UPI app (GPay, PhonePe, Paytm). No card details stored."})]})
 ]}),
-i("div",{className:"mt-6 text-[11px] text-gray-500",children:"After payment, you’ll see thank-you page with transaction ID. Admin → Donations shows status. Private info never public."})]})}),o.type==="donateThankYou"&&c("div",{className:"max-w-[520px] mx-auto text-center py-12",children:[i("div",{className:"w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto",children:i(Mt,{className:"text-green-600",size:36})}),i("h1",{className:"mt-6 text-[32px] font-bold text-[#1a237e]",children:"Thank you! ♥"}),c("p",{className:"mt-3 text-gray-600",children:["Your contribution of ₹",o.data.amount," helps preserve Northeast knowledge."]}),c("div",{className:"mt-6 p-4 rounded-xl bg-white border text-left text-sm",children:[c("div",{children:["Transaction ID: ",i("b",{children:o.data.transactionId})]}),c("div",{children:["Amount: ",c("b",{children:["₹",o.data.amount]})]}),c("div",{children:["Date: ",new Date(o.data.date).toLocaleString()]}),c("div",{children:["Status: ",i("span",{className:"text-green-700 font-bold",children:o.data.status})]})]}),i("button",{onClick:()=>f({type:"home"}),className:"mt-6 h-11 px-6 rounded-full bg-[#1a237e] text-white font-bold",children:"Back to Encyclopedia"})]}),o.type==="admin"&&i("div",{children:!l?c("div",{className:"p-8 rounded-xl bg-white border text-center",children:[i(nl,{className:"mx-auto text-[#1a237e]"}),i("h3",{className:"mt-3 font-bold",children:"Admin Login Required"}),i("p",{className:"text-sm text-gray-500 mt-1",children:"Login as Super Admin or Admin to access dashboard"}),i("button",{onClick:()=>g(!0),className:"mt-4 h-11 px-6 rounded-full bg-[#1a237e] text-white font-bold",children:"Login"})]}):c(tl,{children:[c("div",{className:"flex items-center justify-between",children:[c("div",{children:[i("h1",{className:"text-[28px] font-bold text-[#1a237e]",children:"Admin Dashboard"}),i("p",{className:"text-sm text-gray-500",children:"Mobile-friendly • Large buttons • Managed from Android"})]}),c("div",{className:"text-right",children:[i("div",{className:"text-[11px] text-gray-400",children:"Logged as"}),c("div",{className:"font-bold flex items-center gap-2",children:[l.displayName," ",Ze&&i("span",{className:"bg-[#ff6f00] text-white px-2 py-0.5 rounded-full text-[10px]",children:"SUPER ADMIN"})]})]})]}),i("div",{className:"mt-6 grid grid-cols-2 md:grid-cols-4 gap-3",children:[{label:"GLOBAL SEARCH",icon:Gr,color:"#00897b",action:()=>{le({});V({type:"globalSearch"})}},{label:"STATISTICS",icon:un,color:"#1a237e",action:()=>V({type:"statistics"})},{label:"CONTRIBUTORS",icon:In,color:"#00897b",action:async()=>{
+i("div",{className:"mt-6 text-[11px] text-gray-500",children:"After payment, you’ll see thank-you page with transaction ID. Admin → Donations shows status. Private info never public."})]})}),o.type==="donateThankYou"&&c("div",{className:"max-w-[520px] mx-auto text-center py-12",children:[i("div",{className:"w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto",children:i(Mt,{className:"text-green-600",size:36})}),i("h1",{className:"mt-6 text-[32px] font-bold text-[#1a237e]",children:"Thank you! ♥"}),c("p",{className:"mt-3 text-gray-600",children:["Your contribution of ₹",o.data.amount," helps preserve Northeast knowledge."]}),c("div",{className:"mt-6 p-4 rounded-xl bg-white border text-left text-sm",children:[c("div",{children:["Transaction ID: ",i("b",{children:o.data.transactionId})]}),c("div",{children:["Amount: ",c("b",{children:["₹",o.data.amount]})]}),c("div",{children:["Date: ",new Date(o.data.date).toLocaleString()]}),c("div",{children:["Status: ",i("span",{className:"text-green-700 font-bold",children:o.data.status})]})]}),i("button",{onClick:()=>f({type:"home"}),className:"mt-6 h-11 px-6 rounded-full bg-[#1a237e] text-white font-bold",children:"Back to Encyclopedia"})]}),o.type==="admin"&&i("div",{children:!l?c("div",{className:"p-8 rounded-xl bg-white border text-center",children:[i(nl,{className:"mx-auto text-[#1a237e]"}),i("h3",{className:"mt-3 font-bold",children:"Admin Login Required"}),i("p",{className:"text-sm text-gray-500 mt-1",children:"Login as Super Admin or Admin to access dashboard"}),i("button",{onClick:()=>g(!0),className:"mt-4 h-11 px-6 rounded-full bg-[#1a237e] text-white font-bold",children:"Login"})]}):c(tl,{children:[c("div",{className:"flex items-center justify-between",children:[c("div",{children:[i("h1",{className:"text-[28px] font-bold text-[#1a237e]",children:"Admin Dashboard"}),i("p",{className:"text-sm text-gray-500",children:"Mobile-friendly • Large buttons • Managed from Android"})]}),c("div",{className:"text-right",children:[i("div",{className:"text-[11px] text-gray-400",children:"Logged as"}),c("div",{className:"font-bold flex items-center gap-2",children:[l.displayName," ",Ze&&i("span",{className:"bg-[#ff6f00] text-white px-2 py-0.5 rounded-full text-[10px]",children:"SUPER ADMIN"})]})]})]}),i("div",{"data-ne-admin-cards":"1",className:"mt-6 grid gap-2",style:{gridTemplateColumns:"repeat(3,minmax(0,1fr))"},children:[{label:"GLOBAL SEARCH",icon:Gr,color:"#00897b",action:()=>{le({});V({type:"globalSearch"})}},{label:"STATISTICS",icon:un,color:"#1a237e",action:()=>V({type:"statistics"})},{label:"CONTRIBUTORS",icon:In,color:"#00897b",action:async()=>{
   setNeContributorDetail(null);V({type:"contributors"});
   await neLoadContributorsList();
 }},{label:"SUSPENDED / BLOCKED",icon:In,color:"#c62828",action:async()=>{
   setNeContributorDetail(null);V({type:"restricted"});
   await neLoadContributorsList();
-}},{label:"ADD TRIBE / COMMUNITY",icon:In,color:"#ff6f00",action:()=>V({type:"addTribe"})},{label:"MANAGE PLACES",icon:Ht,color:"#1a237e",action:()=>V({type:"managePlaces"})},{label:"MANAGE ARTICLES",icon:Ur,color:"#1a237e",action:()=>V({type:"manageArticles"})},{label:"MANAGE WORDS",icon:Rn,color:"#283593",action:()=>f({type:"dictionary"})},{label:"MANAGE STORIES",icon:ln,color:"#3949ab",action:()=>f({type:"storyList"})},{label:"MANAGE USERS",icon:In,color:"#ff6f00",action:()=>V({type:"manageUsers"})},{label:"SUGGESTIONS",icon:Gr,color:"#00897b",badge:neSuggestUnread>0,action:()=>V({type:"suggestionsInbox"})},{label:"REVIEW SUBMISSIONS",icon:Wt,color:"#e65100",badge:(e.submissions||[]).some((sb)=>sb.status==="pending"),action:()=>V({type:"submissions"})},{label:"MANAGE CATEGORIES",icon:un,color:"#1a237e",action:async()=>{
+}},{label:"ADD TRIBE / COMMUNITY",icon:In,color:"#ff6f00",action:()=>V({type:"addTribe"})},{label:"MANAGE PLACES",icon:Ht,color:"#1a237e",action:()=>V({type:"managePlaces"})},{label:"MANAGE ARTICLES",icon:Ur,color:"#1a237e",action:()=>V({type:"manageArticles"})},{label:"MANAGE WORDS",icon:Rn,color:"#283593",action:()=>f({type:"dictionary"})},{label:"MANAGE STORIES",icon:ln,color:"#3949ab",action:()=>f({type:"storyList"})},{label:"MANAGE USERS",icon:In,color:"#ff6f00",action:()=>V({type:"manageUsers"})},{label:"LIKES & COMMENTS",icon:Gr,color:"#c2185b",action:()=>{V({type:"engagementLog"});neLoadEngLog()}},{label:"SUGGESTIONS",icon:Gr,color:"#00897b",badge:neSuggestUnread>0,action:()=>V({type:"suggestionsInbox"})},{label:"REVIEW SUBMISSIONS",icon:Wt,color:"#e65100",badge:(e.submissions||[]).some((sb)=>sb.status==="pending"),action:()=>V({type:"submissions"})},{label:"MANAGE CATEGORIES",icon:un,color:"#1a237e",action:async()=>{
   V({type:"categories"});
   try{
     let token=localStorage.getItem("ne_auth_token");
@@ -3999,7 +4141,7 @@ i("div",{className:"mt-6 text-[11px] text-gray-500",children:"After payment, you
     let d=await res.json().catch(()=>({}));
     if(d&&d.success) setNeCategoriesData(d.categories||[]);
   }catch(err){}
-}},{label:"MANAGE ADS",icon:Xr,color:"#283593",action:()=>{V({type:"ads"});setNeAdMsg("");setNeAdForm(null);neAdsLoad()}},{label:"MANAGE DONATIONS",icon:jn,color:"#3949ab",action:()=>V({type:"donations"})},{label:"BACKUP",icon:Lt,color:"#1a237e",action:ji},...(Ze?[{label:"STUDIO",icon:el,color:"#6a1b9a",action:async()=>{V({type:"studio"});setNeStudioTab("HOME");await neLoadStudioConfig();}}]:[]),{label:"SETTINGS",icon:el,color:"#283593",action:()=>V({type:"settings"})},{label:"LIVE STATUS",icon:un,color:"#00897b",action:()=>V({type:"liveStatus"})}].map((a)=>c("button",{onClick:a.action,className:"relative h-[88px] rounded-[16px] bg-white border-2 border-gray-200 hover:border-[#1a237e]/20 hover:shadow-md flex flex-col items-center justify-center gap-1.5 text-center p-2",children:[a.badge&&i("span",{className:"absolute -top-1.5 -right-1.5 text-[16px] leading-none",title:"New activity requires attention",children:"🔔"}),c("div",{className:"w-9 h-9 rounded-full flex items-center justify-center text-white",style:{background:a.color},children:i(a.icon,{size:18})}),i("span",{className:"text-[12px] font-bold leading-tight tracking-wide",children:a.label})]},a.label))}),c("div",{className:"mt-8 grid md:grid-cols-2 gap-4",children:[c("div",{className:"rounded-xl bg-white border p-4",children:[i("h4",{className:"font-bold text-sm",children:"Recent Revisions"}),c("div",{className:"mt-3 space-y-2 max-h-[220px] overflow-y-auto",children:[e.revisions.slice(0,6).map((a)=>c("div",{className:"text-[12px] p-2 rounded bg-gray-50",children:[i("b",{children:a.username})," edited article ",a.articleId," • ",new Date(a.timestamp).toLocaleString()," • ",a.summary]},a.id)),e.revisions.length===0&&i("div",{className:"text-[12px] text-gray-500",children:"No edits yet"})]})]}),c("div",{className:"rounded-xl bg-white border p-4",children:[i("h4",{className:"font-bold text-sm",children:"System Status"}),c("div",{className:"mt-3 space-y-2 text-[12px]",children:[c("div",{className:"flex justify-between",children:[i("span",{children:"Articles"}),i("b",{children:e.articles.length})]}),c("div",{className:"flex justify-between",children:[i("span",{children:"Tribes"}),i("b",{children:e.tribes.length})]}),c("div",{className:"flex justify-between",children:[i("span",{children:"Ads"}),i("b",{className:e.settings.adsEnabled?"text-green-600":"text-gray-500",children:e.settings.adsEnabled?"ON":"OFF (default)"})]}),c("div",{className:"flex justify-between",children:[i("span",{children:"Last Backup"}),i("b",{children:e.settings.lastBackup==="Never"?"Never":new Date(e.settings.lastBackup).toLocaleString()})]}),c("div",{className:"flex justify-between",children:[i("span",{children:"Super Admin"}),i("b",{className:"text-[#ff6f00]",children:"benjamin (Protected)"})]})]})]})]})]})}),o.type==="editArticle"&&c("div",{className:"bg-white rounded-[20px] border p-6",children:[c("h2",{className:"text-xl font-bold text-[#1a237e]",children:[s.id?"Edit":"Add"," Article — Mobile Friendly"]}),c("div",{className:"mt-4 grid gap-3",children:[i("input",{value:s.title||"",onChange:(a)=>p({...s,title:a.target.value}),placeholder:"Title",className:"h-12 px-4 rounded-xl border-2 border-gray-200 focus:border-[#1a237e] focus:outline-none font-bold text-[16px]"}),c("select",{value:s.state||"",onChange:(a)=>p({...s,state:a.target.value}),className:"h-12 px-4 rounded-xl border-2 border-gray-200",children:[i("option",{value:"",children:"State"}),Ln.map((a)=>i("option",{value:a.name,children:a.name},a.slug))]}),
+}},{label:"MANAGE ADS",icon:Xr,color:"#283593",action:()=>{V({type:"ads"});setNeAdMsg("");setNeAdForm(null);neAdsLoad()}},{label:"MANAGE DONATIONS",icon:jn,color:"#3949ab",action:()=>V({type:"donations"})},{label:"BACKUP",icon:Lt,color:"#1a237e",action:ji},...(Ze?[{label:"STUDIO",icon:el,color:"#6a1b9a",action:async()=>{V({type:"studio"});setNeStudioTab("HOME");await neLoadStudioConfig();}}]:[]),{label:"SETTINGS",icon:el,color:"#283593",action:()=>V({type:"settings"})},{label:"LIVE STATUS",icon:un,color:"#00897b",action:()=>V({type:"liveStatus"})}].map((a)=>c("button",{onClick:a.action,"data-ne-admin-card":a.label,style:{aspectRatio:"1 / 1",minWidth:0,padding:"6px"},className:"relative rounded-[12px] bg-white border-2 border-gray-200 hover:border-[#1a237e]/20 hover:shadow-md flex flex-col items-center justify-center gap-1 text-center",children:[a.badge&&i("span",{className:"absolute -top-1.5 -right-1.5 text-[14px] leading-none",title:"New activity requires attention",children:"🔔"}),c("div",{className:"rounded-full flex items-center justify-center text-white",style:{background:a.color,width:"30px",height:"30px",flex:"0 0 auto"},children:i(a.icon,{size:15})}),i("span",{className:"font-bold leading-tight",style:{fontSize:"10px",letterSpacing:".02em",overflowWrap:"anywhere"},children:a.label})]},a.label))}),c("div",{className:"mt-8 grid md:grid-cols-2 gap-4",children:[c("div",{className:"rounded-xl bg-white border p-4",children:[i("h4",{className:"font-bold text-sm",children:"Recent Revisions"}),c("div",{className:"mt-3 space-y-2 max-h-[220px] overflow-y-auto",children:[e.revisions.slice(0,6).map((a)=>c("div",{className:"text-[12px] p-2 rounded bg-gray-50",children:[i("b",{children:a.username})," edited article ",a.articleId," • ",new Date(a.timestamp).toLocaleString()," • ",a.summary]},a.id)),e.revisions.length===0&&i("div",{className:"text-[12px] text-gray-500",children:"No edits yet"})]})]}),c("div",{className:"rounded-xl bg-white border p-4",children:[i("h4",{className:"font-bold text-sm",children:"System Status"}),c("div",{className:"mt-3 space-y-2 text-[12px]",children:[c("div",{className:"flex justify-between",children:[i("span",{children:"Articles"}),i("b",{children:e.articles.length})]}),c("div",{className:"flex justify-between",children:[i("span",{children:"Tribes"}),i("b",{children:e.tribes.length})]}),c("div",{className:"flex justify-between",children:[i("span",{children:"Ads"}),i("b",{className:e.settings.adsEnabled?"text-green-600":"text-gray-500",children:e.settings.adsEnabled?"ON":"OFF (default)"})]}),c("div",{className:"flex justify-between",children:[i("span",{children:"Last Backup"}),i("b",{children:e.settings.lastBackup==="Never"?"Never":new Date(e.settings.lastBackup).toLocaleString()})]}),c("div",{className:"flex justify-between",children:[i("span",{children:"Super Admin"}),i("b",{className:"text-[#ff6f00]",children:"benjamin (Protected)"})]})]})]})]})]})}),o.type==="editArticle"&&c("div",{className:"bg-white rounded-[20px] border p-6",children:[c("h2",{className:"text-xl font-bold text-[#1a237e]",children:[s.id?"Edit":"Add"," Article — Mobile Friendly"]}),c("div",{className:"mt-4 grid gap-3",children:[i("input",{value:s.title||"",onChange:(a)=>p({...s,title:a.target.value}),placeholder:"Title",className:"h-12 px-4 rounded-xl border-2 border-gray-200 focus:border-[#1a237e] focus:outline-none font-bold text-[16px]"}),c("select",{value:s.state||"",onChange:(a)=>p({...s,state:a.target.value}),className:"h-12 px-4 rounded-xl border-2 border-gray-200",children:[i("option",{value:"",children:"State"}),Ln.map((a)=>i("option",{value:a.name,children:a.name},a.slug))]}),
 (function(){let matchedCat=(s.categories||[]).find((cn)=>NE_CATEGORY_TYPES[cn]);if(!matchedCat)return null;let opts=NE_CATEGORY_TYPES[matchedCat];return c("select",{value:(s.infobox&&s.infobox.Type)||"",onChange:(a)=>p({...s,infobox:{...s.infobox,Type:a.target.value}}),className:"h-12 px-4 rounded-xl border-2 border-gray-200",children:[i("option",{value:"",children:"Choose type"}),opts.map((opt)=>i("option",{value:opt,children:opt},opt))]})})(),i("textarea",{value:s.intro||"",onChange:(a)=>p({...s,intro:a.target.value}),placeholder:"Intro (lead paragraph)",className:"min-h-[90px] p-4 rounded-xl border-2 border-gray-200"}),i("textarea",{value:s.content||"",onChange:(a)=>p({...s,content:a.target.value}),placeholder:"Full article content — reliable sources only",className:"min-h-[300px] p-4 rounded-xl border-2 border-gray-200"}),
 c("div",{className:"space-y-3",children:[
   s.imageUrl?c("div",{className:"relative",children:[i("img",{loading:"lazy",decoding:"async",src:s.imageUrl,style:{width:"100%",height:"auto",maxHeight:"60vh",objectFit:"contain"},className:"w-full rounded-xl border"}),c("div",{className:"absolute top-2 right-2 flex gap-2",children:[i("button",{type:"button",onClick:()=>document.getElementById("gallery-upload-input-2").click(),className:"px-3 py-1.5 rounded-full bg-white/90 text-[12px] font-bold shadow",children:"Change Photo"}),i("button",{type:"button",onClick:()=>p({...s,imageUrl:"",imageCaption:"",imageCredit:""}),className:"px-3 py-1.5 rounded-full bg-red-500 text-white text-[12px] font-bold shadow",children:"Remove"})]})]}):c("div",{className:"border-2 border-dashed border-gray-300 rounded-xl p-6 text-center bg-gray-50",children:[i("div",{className:"text-3xl",children:"\ud83d\udcf7"}),i("div",{className:"mt-2 font-bold text-[#1a237e] text-sm",children:"Upload Photo from Gallery"}),i("div",{className:"mt-1 text-[11px] text-gray-500",children:"Tap to select from your phone gallery"}),i("button",{type:"button",onClick:()=>document.getElementById("gallery-upload-input-2").click(),className:"mt-3 h-10 px-5 rounded-full bg-[#1a237e] text-white font-bold text-sm",children:"Choose Photo"})]}),
@@ -4007,7 +4149,7 @@ c("div",{className:"space-y-3",children:[
   s.imageUrl&&c("div",{className:"grid gap-2",children:[i("input",{value:s.imageCaption||"",onChange:(a)=>p({...s,imageCaption:a.target.value}),placeholder:"Caption (optional)",className:"h-10 px-3 rounded-lg border text-sm"}),i("input",{value:s.imageCredit||"",onChange:(a)=>p({...s,imageCredit:a.target.value}),placeholder:"Photo credit (optional)",className:"h-10 px-3 rounded-lg border text-sm"})]})
 ]}),
 (neContributor&&!l)&&c("label",{className:"flex items-center gap-2 text-[13px] font-medium",children:[i("input",{type:"checkbox",checked:!!(s.infobox&&s.infobox.isAnonymous),onChange:(a)=>p({...s,infobox:{...(s.infobox||{}),isAnonymous:a.target.checked}}),style:{width:"16px",height:"16px"}}),"Post anonymously"]}),
-c("div",{className:"flex gap-2",children:[i("button",{onClick:xi,className:"h-12 px-8 rounded-xl bg-[#1a237e] text-white font-bold text-[15px]",children:"SAVE / PUBLISH"}),i("button",{onClick:()=>f(neContributor&&!l?{type:"home"}:{type:"admin"}),className:"h-12 px-6 rounded-xl border-2 font-bold",children:"Cancel"})]})]})]}),o.type==="legal"&&c("div",{className:"bg-white rounded-[20px] border p-6 md:p-8 max-w-[800px]",children:[i("h1",{className:"text-[28px] font-bold text-[#1a237e]",children:o.data.title}),i("div",{className:"mt-4 prose prose-sm max-w-none text-[14px] leading-relaxed whitespace-pre-wrap",children:o.data.content})]})]}),M&&i("div",{className:"fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm flex items-start justify-center p-4 overflow-y-auto",children:c("div",{className:"bg-white rounded-[20px] w-full max-w-[600px] my-8 p-6 shadow-2xl",children:[c("div",{className:"flex justify-between items-center",children:[i("h3",{className:"font-bold text-lg text-[#1a237e]",children:M.type==="addTribe"?"Add Tribe / Community":M.type==="manageArticles"?"Manage Articles":M.type==="ads"?"Manage Ads":M.type==="managePeople"?"Manage People":M.type==="managePlaces"?"Manage Places":M.type==="categories"?"Manage Categories":M.type==="categoryContents"?("Contents: "+(M.data&&M.data.name||"")):M.type==="studio"?"Studio":M.type==="contributorDashboard"?"My Dashboard":M.type==="globalSearch"?"Global Search":M.type==="statistics"?"Statistics":M.type==="contributors"?"Contributors & Creator Activity":M.type==="restricted"?"Suspended / Blocked":M.type==="liveStatus"?"Live Status":M.type}),i("button",{onClick:()=>V(null),className:"p-2 rounded-full bg-gray-100",children:i($n,{size:16})})]}),M.type==="manageUsers"&&c("div",{className:"mt-4 space-y-3",children:[
+c("div",{className:"flex gap-2",children:[i("button",{onClick:xi,className:"h-12 px-8 rounded-xl bg-[#1a237e] text-white font-bold text-[15px]",children:"SAVE / PUBLISH"}),i("button",{onClick:()=>f(neContributor&&!l?{type:"home"}:{type:"admin"}),className:"h-12 px-6 rounded-xl border-2 font-bold",children:"Cancel"})]})]})]}),o.type==="legal"&&c("div",{className:"bg-white rounded-[20px] border p-6 md:p-8 max-w-[800px]",children:[i("h1",{className:"text-[28px] font-bold text-[#1a237e]",children:o.data.title}),i("div",{className:"mt-4 prose prose-sm max-w-none text-[14px] leading-relaxed whitespace-pre-wrap",children:o.data.content})]})]}),M&&i("div",{className:"fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm flex items-start justify-center p-4 overflow-y-auto",children:c("div",{className:"bg-white rounded-[20px] w-full max-w-[600px] my-8 p-6 shadow-2xl",children:[c("div",{className:"flex justify-between items-center",children:[i("h3",{className:"font-bold text-lg text-[#1a237e]",children:M.type==="addTribe"?"Add Tribe / Community":M.type==="manageArticles"?"Manage Articles":M.type==="ads"?"Manage Ads":M.type==="managePeople"?"Manage People":M.type==="managePlaces"?"Manage Places":M.type==="categories"?"Manage Categories":M.type==="categoryContents"?("Contents: "+(M.data&&M.data.name||"")):M.type==="studio"?"Studio":M.type==="contributorDashboard"?"My Dashboard":M.type==="globalSearch"?"Global Search":M.type==="statistics"?"Statistics":M.type==="contributors"?"Contributors & Creator Activity":M.type==="restricted"?"Suspended / Blocked":M.type==="liveStatus"?"Live Status":M.type==="engagementLog"?"Likes, Dislikes & Comments":M.type}),i("button",{onClick:()=>V(null),className:"p-2 rounded-full bg-gray-100",children:i($n,{size:16})})]}),M.type==="manageUsers"&&c("div",{className:"mt-4 space-y-3",children:[
   i("p",{className:"text-[12px] text-gray-500",children:"Super Admin protection: Regular Admins cannot delete/demote Super Admin. Only Super Admin can manage Super Admin. Separate passwords per user."}),
   neStaffUsers===null&&i("div",{className:"text-[12px] text-gray-500 py-4 text-center",children:"Loading users from server…"}),
   (neStaffUsers||[]).map((a)=>c("div",{className:"flex items-center justify-between p-3 rounded-xl border bg-white",children:[
@@ -4484,6 +4626,7 @@ M.type==="liveStatus"&&c("div",{className:"mt-3",children:[
   ]}))}),
   i("p",{className:"text-gray-400",style:{fontSize:"9.5px",marginTop:"8px",lineHeight:1.35},children:"\"Users\" counts are server-tracked via session heartbeats recorded in D1 (visitor_sessions), not estimated from page views. \"Online Now\" = active in the last 90 seconds. \"Total Time on Site\" sums each session's actual tracked active time. Contributors, Articles, Dictionary Words, Stories, Tribes & Communities, and Photos are live counts from D1. \"App Installs\" counts each phone/computer once when the app is installed or opened as an app. \"Alerts On\" = visitors and contributors who get new-upload alerts."})
 ]}),
+M.type==="engagementLog"&&neEngagementLogUI(),
 M.type==="suggestionsInbox"&&c("div",{className:"mt-4 space-y-3",children:[
   neSuggestions.length===0&&i("div",{className:"p-6 rounded-xl bg-gray-50 text-center text-gray-500 text-sm",children:"No suggestions yet."}),
   neSuggestions.map((sg)=>c("div",{className:"p-4 rounded-xl border bg-white "+(sg.status==="NEW"?"border-[#00897b]":"border-gray-200"),children:[
@@ -4770,8 +4913,8 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
         ]}),
         neStudioTab==="HOME" && c("div",{className:"mt-4",children:[
           i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide",children:"Sections"}),
-          i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Enable/disable and reorder. \"Explore by Topic\" and \"All Categories\" can be enabled/disabled but keep their current position (they sit inside the two-column layout with the sidebar)."}),
-          c("div",{className:"mt-2 space-y-1.5",children:NE_HOME_SECTION_DEFS.map((sd)=>{
+          i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Enable/disable and reorder. Type an order number or use \u25b2 \u25bc -- the list below always shows the order the homepage uses (smallest number on top). \"All Categories\" keeps its place next to the sidebar."}),
+          c("div",{"data-ne-studio-sections":"1",className:"mt-2 space-y-1.5",children:neStudioSectionList().map((sd,sdIx,sdArr)=>{
             const sections=Array.isArray(neStudioEditDesign().sections)?neStudioEditDesign().sections:[];
             const entry=sections.find((s)=>s&&s.key===sd.key);
             const enabled=!entry||entry.enabled!==false;
@@ -4779,7 +4922,7 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
             return c("div",{key:sd.key,className:"flex items-center gap-2 p-2 rounded-lg bg-gray-50",children:[
               i("input",{type:"checkbox",checked:enabled,onChange:()=>neToggleSectionEnabled(sd.key)}),
               i("span",{className:"flex-1 text-[13px] "+(enabled?"text-gray-800":"text-gray-400 line-through"),children:sd.label}),
-              sd.reorder && c("span",{className:"flex items-center gap-1",children:[i("span",{className:"text-[10px] text-gray-400",children:"order"}),i("input",{type:"number",value:order,onChange:(ev)=>neSetSectionOrder(sd.key,ev.target.value),className:"w-14 h-7 px-1.5 rounded border text-[12px]"})]})
+              sd.reorder && c("span",{className:"flex items-center gap-1",children:[i("button",{type:"button","data-ne-move-up":sd.key,disabled:sdIx===0||!(sdArr[sdIx-1]&&sdArr[sdIx-1].reorder),onClick:()=>neMoveSection(sd.key,-1),className:"w-7 h-7 rounded border text-[12px] bg-white",children:"\u25b2"}),i("button",{type:"button","data-ne-move-down":sd.key,disabled:!(sdArr[sdIx+1]&&sdArr[sdIx+1].reorder),onClick:()=>neMoveSection(sd.key,1),className:"w-7 h-7 rounded border text-[12px] bg-white",children:"\u25bc"}),i("span",{className:"text-[10px] text-gray-400",children:"order"}),i("input",{type:"number","data-ne-order":sd.key,value:order,onChange:(ev)=>neSetSectionOrder(sd.key,ev.target.value),className:"w-14 h-7 px-1.5 rounded border text-[12px]"})]})
             ]});
           })})
         ]}),
@@ -4790,7 +4933,7 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
             {key:"dailyNews",label:"Daily Northeast News"},
             {key:"quickCategories",label:"Quick Categories Grid"},
             {key:"featured",label:"Today's Featured"},
-            {key:"exploreByTopic",label:"Explore by Topic"},
+            {key:"exploreByTopic",label:"Article"},
             {key:"allCategories",label:"All Categories"}
           ];
           // Round 9: Columns-per-row originally only applied to the 3
@@ -4892,9 +5035,9 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide",children:"Select Section"}),
             i("p",{className:"text-[11px] text-gray-400 mt-0.5",children:"Select one section and edit its settings. The selected section stays selected while you edit controls or switch to another section."}),
             c("select",{value:neDesignSelectedSection,onChange:(ev)=>setNeDesignSelectedSection(ev.target.value),className:"mt-2 w-full h-10 px-3 rounded-lg border text-[13px]",children:[
-              {key:"hero",label:"Header / Banner"},{key:"dailyNews",label:"Daily Northeast News"},{key:"quickCategories",label:"Quick Categories Grid"},{key:"featured",label:"Today's Featured"},{key:"exploreByTopic",label:"Explore by Topic"},{key:"allCategories",label:"All Categories"},{key:"footer",label:"Footer"}
+              {key:"hero",label:"Header / Banner"},{key:"dailyNews",label:"Daily Northeast News"},{key:"quickCategories",label:"Quick Categories Grid"},{key:"featured",label:"Today's Featured"},{key:"exploreByTopic",label:"Article"},{key:"allCategories",label:"All Categories"},{key:"footer",label:"Footer"}
             ].map((opt)=>i("option",{key:opt.key,value:opt.key,children:opt.label}))}),
-            i("p",{className:"mt-2 text-[11px] text-gray-500",children:"Editing: "+(({hero:"Header / Banner",quickActions:"Quick Action Buttons",dailyNews:"Daily Northeast News",quickCategories:"Quick Categories Grid",featured:"Today's Featured",exploreByTopic:"Explore by Topic",allCategories:"All Categories",footer:"Footer"})[neDesignSelectedSection]||neDesignSelectedSection)}),
+            i("p",{className:"mt-2 text-[11px] text-gray-500",children:"Editing: "+(({hero:"Header / Banner",quickActions:"Quick Action Buttons",dailyNews:"Daily Northeast News",quickCategories:"Quick Categories Grid",featured:"Today's Featured",exploreByTopic:"Article",allCategories:"All Categories",footer:"Footer"})[neDesignSelectedSection]||neDesignSelectedSection)}),
             i("p",{className:"mt-2 text-[11px] text-gray-400",children:"Every control below changes ONLY the section selected above. No other section is touched. Choose None to reset that one control for this section."}),
 
             ...(neDesignSelectedSection!=="footer"?[
@@ -4919,6 +5062,7 @@ M.type==="submissions"&&c("div",{className:"mt-4 space-y-4",children:[
               i("span",{className:"text-[11px] text-gray-500",children:"Height (px)"}),
               i("input",{type:"number",value:neBulkSizeCustomHeight,onChange:(ev)=>{const v=Number(ev.target.value)||48;setNeBulkSizeCustomHeight(v);neSetSectionCategorySizeCustom(neDesignSelectedSection,{height:v});},className:"w-20 h-8 px-2 rounded border text-[12px]"})
             ]}),
+            neDesignSelectedSection==="exploreByTopic"&&i("p",{"data-ne-article-size-help":"1",className:"mt-1 text-[11px] text-gray-400",children:"Article: with Box Shape None (or No Box) the articles show as a reading list -- Size sets the picture height. With Round, Oval, Rectangle or Square they show as cards: Smaller 140×180, Standard 170×220, Medium 210×260, Large 260×320."}),
             neDesignSelectedSection==="featured"&&i("p",{className:"mt-1 text-[11px] text-gray-400",children:"Today's Featured card (width × height): Smaller 140×180, Standard 170×220, Medium 210×260, Large 260×320. Custom accepts a height of 140 to 600px (width follows). Text grows with the card, and a long title makes the card taller instead of being cut off."}),
 
             i("p",{className:"text-[12px] font-bold text-gray-500 uppercase tracking-wide mt-5",children:"Box width"}),
