@@ -2636,6 +2636,80 @@ export default {
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
 
+  // --- Super Admin: WHO liked / disliked / commented. Reactions only store an
+  // actorKey ('c:'+contributorId or 'a:'+username), so names are resolved here
+  // from the contributors table. Comments already store the real actor. Both
+  // routes are SUPER_ADMIN-only (verified JWT), never exposed to visitors. ---
+  async function neIsSuperAdmin(request, env){
+    const token = getTokenFromRequest(request);
+    const payload = token ? await verifyJWT(token, getJwtSecret(env), env) : null;
+    return !!(payload && payload.role==='SUPER_ADMIN');
+  }
+  async function neActorNames(d1, keys){
+    const out = {};
+    const ids = [...new Set(keys.filter((k)=>typeof k==='string' && k.startsWith('c:')).map((k)=>k.slice(2)))];
+    for(let i=0;i<ids.length;i+=50){
+      const part = ids.slice(i,i+50);
+      const rows = await d1.prepare("SELECT id,displayName,email FROM contributors WHERE id IN ("+part.map(()=>'?').join(',')+")").bind(...part).all();
+      for(const r of (rows.results||[])) out['c:'+r.id] = {name:r.displayName||'Contributor', email:r.email||'', type:'contributor'};
+    }
+    for(const k of keys){ if(typeof k==='string' && k.startsWith('a:') && !out[k]) out[k] = {name:k.slice(2), email:'', type:'admin'}; }
+    return out;
+  }
+  if(path==='/api/admin/engagement/who' && request.method==='GET'){
+    try{
+      if(!(await neIsSuperAdmin(request, env))) return jsonResponse({success:false,error:'SUPER_ADMIN only'},403);
+      if(!env.NE_ENCYCLOPEDIA_D1) return jsonResponse({success:false,error:'D1 not configured'},500);
+      const d1 = env.NE_ENCYCLOPEDIA_D1;
+      await initD1Tables(d1);
+      const contentType = url.searchParams.get('contentType');
+      const contentId = (url.searchParams.get('contentId')||'').toString();
+      if(!NE_ENGAGEMENT_CONTENT_TYPES.includes(contentType) || !contentId) return jsonResponse({success:false,error:'contentType and contentId required'},400);
+      const rx = await d1.prepare("SELECT actorKey,reactionType,createdAt FROM reactions WHERE contentType=? AND contentId=? ORDER BY createdAt DESC").bind(contentType,contentId).all();
+      const rows = rx.results||[];
+      const names = await neActorNames(d1, rows.map((r)=>r.actorKey));
+      const cm = await d1.prepare("SELECT id,actorId,actorType,displayName,isAnonymous,text,createdAt FROM comments WHERE contentType=? AND contentId=? AND deletedAt IS NULL ORDER BY createdAt DESC").bind(contentType,contentId).all();
+      return jsonResponse({success:true,
+        reactions: rows.map((r)=>({type:r.reactionType, name:(names[r.actorKey]||{}).name||r.actorKey, email:(names[r.actorKey]||{}).email||'', actorType:(names[r.actorKey]||{}).type||'', createdAt:r.createdAt})),
+        comments: (cm.results||[]).map((r)=>({id:r.id, name:r.displayName, actorType:r.actorType, isAnonymous:!!r.isAnonymous, text:r.text, createdAt:r.createdAt}))
+      });
+    }catch(e){ return jsonResponse({success:false,error:e.message},500); }
+  }
+  if(path==='/api/admin/engagement/recent' && request.method==='GET'){
+    try{
+      if(!(await neIsSuperAdmin(request, env))) return jsonResponse({success:false,error:'SUPER_ADMIN only'},403);
+      if(!env.NE_ENCYCLOPEDIA_D1) return jsonResponse({success:false,error:'D1 not configured'},500);
+      const d1 = env.NE_ENCYCLOPEDIA_D1;
+      await initD1Tables(d1);
+      const lim = Math.max(10, Math.min(300, Number(url.searchParams.get('limit'))||150));
+      const rx = (await d1.prepare("SELECT contentType,contentId,actorKey,reactionType,createdAt FROM reactions ORDER BY createdAt DESC LIMIT ?").bind(lim).all()).results||[];
+      const cm = (await d1.prepare("SELECT id,contentType,contentId,displayName,actorType,isAnonymous,text,createdAt FROM comments WHERE deletedAt IS NULL ORDER BY createdAt DESC LIMIT ?").bind(lim).all()).results||[];
+      const names = await neActorNames(d1, rx.map((r)=>r.actorKey));
+      // titles of the liked/commented items, one query per content type
+      const want = {};
+      for(const r of [...rx,...cm]){ (want[r.contentType] = want[r.contentType] || new Set()).add(String(r.contentId)); }
+      const titleSql = {article:["articles","title"], story:["stories","title"], word:["dictionary","word"], media:["media","title"]};
+      const titles = {};
+      for(const t of Object.keys(want)){
+        const ts = titleSql[t]; if(!ts) continue;
+        const ids = [...want[t]];
+        for(let i=0;i<ids.length;i+=50){
+          const part = ids.slice(i,i+50);
+          try{
+            const rows = await d1.prepare("SELECT id,"+ts[1]+" AS t FROM "+ts[0]+" WHERE id IN ("+part.map(()=>'?').join(',')+")").bind(...part).all();
+            for(const r of (rows.results||[])) titles[t+':'+r.id] = r.t;
+          }catch(e){}
+        }
+      }
+      const items = [
+        ...rx.map((r)=>({kind:r.reactionType, contentType:r.contentType, contentId:r.contentId, title:titles[r.contentType+':'+r.contentId]||'', name:(names[r.actorKey]||{}).name||r.actorKey, email:(names[r.actorKey]||{}).email||'', actorType:(names[r.actorKey]||{}).type||'', createdAt:r.createdAt})),
+        ...cm.map((r)=>({kind:'comment', contentType:r.contentType, contentId:r.contentId, title:titles[r.contentType+':'+r.contentId]||'', name:r.displayName, actorType:r.actorType, isAnonymous:!!r.isAnonymous, text:r.text, createdAt:r.createdAt}))
+      ].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).slice(0, lim);
+      const counts = {like:rx.filter((r)=>r.reactionType==='like').length, dislike:rx.filter((r)=>r.reactionType==='dislike').length, comment:cm.length};
+      return jsonResponse({success:true, items, counts});
+    }catch(e){ return jsonResponse({success:false,error:e.message},500); }
+  }
+
   // --- Visitor/session heartbeat. Public (works for anonymous visitors);
   // if a valid token IS present, the verified identity always overrides
   // whatever the client claims about itself. Elapsed time since this
