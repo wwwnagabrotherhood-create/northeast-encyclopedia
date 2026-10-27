@@ -63,8 +63,7 @@ async function fetchAssetWithWrapperFallback(request, env) {
 // Requirements: No hardcoded fallback password usage when env exists, no silent user recreation on login, JWT same secret, ne_auth_token compatible
 
 const FALLBACK_SALT = "NE_SECURE_SALT_51780b3815759ff5_prod_v2";
-// (Backup signing key removed: passes are only ever signed with the JWT_SECRET
-// set in Cloudflare. If it is missing, sign-in fails safely instead.)
+const FALLBACK_JWT = "NE_JWT_SUPER_SECURE_2024_BENYANTHAN_64CHARS_SECRET_KEY_FOR_SIGNING";
 // NE CONTRIBUTOR V1 (test-project only) - Google OAuth Client ID is public by design, safe to embed
 const NE_CONTRIB_GOOGLE_CLIENT_ID = "917861607184-7s2ru1dnajfh8a0jare7ae54oa6evpcr.apps.googleusercontent.com";
 
@@ -80,7 +79,7 @@ function getJwtSecret(env){
     if(env.JWT_SECRET) return env.JWT_SECRET;
     if(env.JWT_SECRET_KEY) return env.JWT_SECRET_KEY;
   }
-  return null;
+  return FALLBACK_JWT;
 }
 function b64urlEncode(str){
   return btoa(str).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
@@ -111,7 +110,6 @@ async function pbkdf2Hash(password, salt){
 }
 
 async function signJWT(payload, secret){
-  if(!secret) throw new Error('JWT secret not configured');
   const header={alg:'HS256',typ:'JWT'};
   const h=b64urlEncode(JSON.stringify(header));
   const p=b64urlEncode(JSON.stringify(payload));
@@ -123,7 +121,6 @@ async function signJWT(payload, secret){
 
 async function verifyJWT(token, secret, env){
   try{
-    if(!secret || !token) return null;
     const parts=token.split('.');
     if(parts.length!==3) return null;
     const [h,p,s]=parts;
@@ -254,19 +251,11 @@ function neSanitizeAdNetwork(v){
     const x = typeof inSlots[k]==='string' ? inSlots[k].trim() : '';
     if(/^[0-9]{5,20}$/.test(x)) slots[k] = x;
   }
-  // "4 equal cards": up to 4 Google ad-unit IDs per place (one per card).
-  const cards = {};
-  const inCards = src.cards && typeof src.cards==='object' ? src.cards : {};
-  for(const k of NE_AD_NETWORK_SLOTS){
-    const arr = Array.isArray(inCards[k]) ? inCards[k] : [];
-    const four = [0,1,2,3].map((ix) => { const x = typeof arr[ix]==='string' ? arr[ix].trim() : ''; return /^[0-9]{5,20}$/.test(x) ? x : ''; });
-    if(four.some(Boolean)) cards[k] = four;
-  }
-  return { enabled: src.enabled===true && !!client, provider: 'adsense', client, slots, cards };
+  return { enabled: src.enabled===true && !!client, provider: 'adsense', client, slots };
 }
 // How direct ads are laid out in each in-page placement (display only, never
 // a limit on how many ads can be stored). Default = single (today's look).
-const NE_AD_LAYOUT_MODES = ['single','row','swipe','rotate','cards4'];
+const NE_AD_LAYOUT_MODES = ['single','row','swipe','rotate'];
 function neSanitizeAdLayout(v){
   const src = v && typeof v==='object' ? v : {};
   const out = {};
@@ -1035,260 +1024,11 @@ function neProjectContentRow(row, kind, isSuperAdmin, viewerContributorId, realN
   return {...row, [idField]:'', [nameField]:'Anonymous Contributor'};
 }
 
-// ===== NE ALERTS + APP INSTALLS (added) ====================================
-// 1) App installs: the page reports once per phone/computer when the app is
-//    installed (or first opened as an installed app). Super Admin sees the
-//    count in Live Status.
-// 2) New-content alerts (Web Push): visitors and contributors who allow
-//    alerts are saved in ne_push_subs. Every time something NEW is published
-//    (article, story, word, photo, tribe, person, place) one row goes into
-//    ne_push_events and is sent to every subscriber in small batches.
-//    The push message is empty; the phone's app helper (sw.js) then asks
-//    /api/push/latest what is new and shows the alert. Keys are made
-//    automatically on first use and kept in D1 (nothing to set up).
-const NE_PUSH_BATCH = 25;               // pushes per request (Cloudflare free plan allows 50 sub-requests)
-const NE_PUSH_HOSTS = /(^|\.)(fcm\.googleapis\.com|push\.services\.mozilla\.com|push\.apple\.com|notify\.windows\.com)$/i;
-let nePushReady = null, nePushKeys = null, nePushJwtCache = {}, nePushCheckAt = 0;
-
-function neB64u(bytes){
-  let s = ''; const b = new Uint8Array(bytes);
-  for(let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
-  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-async function nePushTables(d1){
-  if(!nePushReady){
-    nePushReady = d1.batch([
-      d1.prepare("CREATE TABLE IF NOT EXISTS ne_push_keys (id INTEGER PRIMARY KEY, pub TEXT NOT NULL, priv TEXT NOT NULL, createdAt TEXT)"),
-      d1.prepare("CREATE TABLE IF NOT EXISTS ne_push_subs (endpoint TEXT PRIMARY KEY, vid TEXT, createdAt TEXT, lastOkAt TEXT, fails INTEGER DEFAULT 0)"),
-      d1.prepare("CREATE TABLE IF NOT EXISTS ne_push_events (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT, itemId TEXT, title TEXT, body TEXT, url TEXT, createdAt TEXT, cursor TEXT DEFAULT '', done INTEGER DEFAULT 0, sent INTEGER DEFAULT 0, failed INTEGER DEFAULT 0, leaseUntil INTEGER DEFAULT 0)"),
-      d1.prepare("CREATE TABLE IF NOT EXISTS ne_app_installs (vid TEXT PRIMARY KEY, how TEXT, platform TEXT, firstAt TEXT, lastAt TEXT)")
-    ]).catch((e) => { nePushReady = null; throw e; });
-  }
-  return nePushReady;
-}
-async function nePushGetKeys(d1){
-  if(nePushKeys) return nePushKeys;
-  await nePushTables(d1);
-  let row = await d1.prepare("SELECT pub, priv FROM ne_push_keys WHERE id=1").first();
-  if(!row){
-    const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
-    const pub = neB64u(await crypto.subtle.exportKey('raw', kp.publicKey));
-    const priv = JSON.stringify(await crypto.subtle.exportKey('jwk', kp.privateKey));
-    await d1.prepare("INSERT OR IGNORE INTO ne_push_keys (id, pub, priv, createdAt) VALUES (1, ?, ?, ?)").bind(pub, priv, new Date().toISOString()).run();
-    row = await d1.prepare("SELECT pub, priv FROM ne_push_keys WHERE id=1").first();
-  }
-  const jwk = JSON.parse(row.priv);
-  const key = await crypto.subtle.importKey('jwk', { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y, d: jwk.d }, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
-  nePushKeys = { pub: row.pub, key };
-  return nePushKeys;
-}
-// One signed VAPID token per push service, reused for 6 hours.
-async function nePushAuth(keys, endpoint, siteOrigin){
-  const aud = new URL(endpoint).origin;
-  const now = Math.floor(Date.now() / 1000);
-  const c = nePushJwtCache[aud];
-  if(c && c.exp - now > 3600) return c.header;
-  const enc = (o) => neB64u(new TextEncoder().encode(JSON.stringify(o)));
-  const exp = now + 6 * 3600;
-  const unsigned = enc({ typ: 'JWT', alg: 'ES256' }) + '.' + enc({ aud, exp, sub: siteOrigin });
-  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, keys.key, new TextEncoder().encode(unsigned));
-  const header = 'vapid t=' + unsigned + '.' + neB64u(sig) + ', k=' + keys.pub;
-  nePushJwtCache[aud] = { exp, header };
-  return header;
-}
-function neSiteOrigin(url){
-  return /^https:/.test(url.origin) ? url.origin : 'https://northeastencyclopedia.com';
-}
-function neClip(s, n){ s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1).trim() + '…' : s; }
-
-// Called after something NEW is published. Never throws, never slows the save.
-async function neQueueAlert(env, ctx, url, ev){
-  try{
-    const d1 = env.NE_ENCYCLOPEDIA_D1; if(!d1) return;
-    await nePushTables(d1);
-    await d1.prepare("INSERT INTO ne_push_events (kind, itemId, title, body, url, createdAt) VALUES (?,?,?,?,?,?)")
-      .bind(ev.kind, String(ev.itemId || ''), neClip(ev.title, 90), neClip(ev.body, 140), ev.url || '/', new Date().toISOString()).run();
-    nePushCheckAt = 0;
-    const job = neDrainAlerts(env, url).catch(() => {});
-    if(ctx && ctx.waitUntil) ctx.waitUntil(job);
-  }catch(e){}
-}
-// Sends the next batch of the oldest unfinished alert. Safe to call from
-// many requests at once: a short lease stops two requests sending the same batch.
-async function neDrainAlerts(env, url){
-  const d1 = env.NE_ENCYCLOPEDIA_D1; if(!d1) return 0;
-  await nePushTables(d1);
-  const nowMs = Date.now();
-  const ev = await d1.prepare("SELECT id, cursor FROM ne_push_events WHERE done=0 ORDER BY id LIMIT 1").first();
-  if(!ev) return 0;
-  const got = await d1.prepare("UPDATE ne_push_events SET leaseUntil=? WHERE id=? AND leaseUntil<?").bind(nowMs + 30000, ev.id, nowMs).run();
-  if(!got || !got.meta || !got.meta.changes) return 0;
-  let sent = 0, failed = 0, last = ev.cursor || '';
-  try{
-    const subs = (await d1.prepare("SELECT endpoint FROM ne_push_subs WHERE endpoint>? ORDER BY endpoint LIMIT ?").bind(last, NE_PUSH_BATCH).all()).results || [];
-    if(subs.length){
-      const keys = await nePushGetKeys(d1);
-      const origin = neSiteOrigin(url);
-      const gone = [], ok = [], bad = [];
-      await Promise.all(subs.map(async (s) => {
-        try{
-          const r = await fetch(s.endpoint, { method: 'POST', headers: { 'Authorization': await nePushAuth(keys, s.endpoint, origin), 'TTL': '86400', 'Urgency': 'normal', 'Topic': 'ne-new', 'Content-Length': '0' } });
-          if(r.status === 404 || r.status === 410) gone.push(s.endpoint);
-          else if(r.status >= 200 && r.status < 300) ok.push(s.endpoint);
-          else bad.push(s.endpoint);
-        }catch(e){ bad.push(s.endpoint); }
-      }));
-      sent = ok.length; failed = gone.length + bad.length;
-      last = subs[subs.length - 1].endpoint;
-      const st = [];
-      gone.forEach((e) => st.push(d1.prepare("DELETE FROM ne_push_subs WHERE endpoint=?").bind(e)));
-      bad.forEach((e) => st.push(d1.prepare("UPDATE ne_push_subs SET fails=fails+1 WHERE endpoint=?").bind(e)));
-      if(ok.length) st.push(d1.prepare("UPDATE ne_push_subs SET fails=0, lastOkAt=? WHERE endpoint IN (" + ok.map(() => '?').join(',') + ")").bind(new Date().toISOString(), ...ok));
-      st.push(d1.prepare("DELETE FROM ne_push_subs WHERE fails>=5"));
-      await d1.batch(st);
-    }
-    const finished = subs.length < NE_PUSH_BATCH;
-    await d1.prepare("UPDATE ne_push_events SET cursor=?, done=?, sent=sent+?, failed=failed+?, leaseUntil=0 WHERE id=?").bind(last, finished ? 1 : 0, sent, failed, ev.id).run();
-  }catch(e){
-    try{ await d1.prepare("UPDATE ne_push_events SET leaseUntil=0 WHERE id=?").bind(ev.id).run(); }catch(e2){}
-  }
-  return sent;
-}
-// Cheap "is anything waiting?" check, at most every 15 seconds per server copy.
-function neDrainSoon(env, ctx, url){
-  const now = Date.now();
-  if(now - nePushCheckAt < 15000 || !ctx || !ctx.waitUntil || !env.NE_ENCYCLOPEDIA_D1) return;
-  nePushCheckAt = now;
-  ctx.waitUntil(neDrainAlerts(env, url).catch(() => {}));
-}
-function neValidVid(v){ v = String(v || ''); return v.length >= 6 && v.length <= 80 && /^[a-zA-Z0-9_-]+$/.test(v) ? v : ''; }
-
-// Routes. Returns a Response, or null when the path is not one of these.
-async function neAlertRoutes(request, env, ctx, url, path){
-  if(!path.startsWith('/api/push/') && path !== '/api/track/installed') return null;
-  const d1 = env.NE_ENCYCLOPEDIA_D1;
-  if(!d1) return jsonResponse({ success: false, error: 'D1 not configured' }, 503);
-  try{
-    await nePushTables(d1);
-    if(path === '/api/push/key' && request.method === 'GET'){
-      const k = await nePushGetKeys(d1);
-      return jsonResponse({ success: true, publicKey: k.pub });
-    }
-    if(path === '/api/push/subscribe' && request.method === 'POST'){
-      const body = await request.json().catch(() => ({}));
-      const sub = body.subscription || {};
-      const ep = String(sub.endpoint || '');
-      let host = '';
-      try{ const u = new URL(ep); if(u.protocol === 'https:') host = u.hostname; }catch(e){}
-      if(!host || ep.length > 1000 || !NE_PUSH_HOSTS.test(host)) return jsonResponse({ success: false, error: 'Unsupported browser' }, 400);
-      const now = new Date().toISOString();
-      if(body.oldEndpoint && body.oldEndpoint !== ep) await d1.prepare("DELETE FROM ne_push_subs WHERE endpoint=?").bind(String(body.oldEndpoint)).run();
-      await d1.prepare("INSERT INTO ne_push_subs (endpoint, vid, createdAt, lastOkAt, fails) VALUES (?,?,?,?,0) ON CONFLICT(endpoint) DO UPDATE SET vid=excluded.vid, fails=0")
-        .bind(ep, neValidVid(body.vid), now, now).run();
-      return jsonResponse({ success: true });
-    }
-    if(path === '/api/push/unsubscribe' && request.method === 'POST'){
-      const body = await request.json().catch(() => ({}));
-      if(body.endpoint) await d1.prepare("DELETE FROM ne_push_subs WHERE endpoint=?").bind(String(body.endpoint)).run();
-      return jsonResponse({ success: true });
-    }
-    if(path === '/api/push/latest' && request.method === 'GET'){
-      // Asked by the phone right after an alert arrives; also helps send the next batch.
-      neDrainSoon(env, ctx, url);
-      const ev = await d1.prepare("SELECT id, kind, title, body, url, createdAt FROM ne_push_events ORDER BY id DESC LIMIT 1").first();
-      if(!ev) return jsonResponse({ success: true, alert: null });
-      const since = new Date(Date.now() - 30 * 60000).toISOString();
-      const n = await d1.prepare("SELECT COUNT(*) AS n FROM ne_push_events WHERE createdAt>=?").bind(since).first();
-      return jsonResponse({ success: true, alert: { id: ev.id, kind: ev.kind, title: ev.title, body: ev.body, url: ev.url, more: Math.max(0, ((n && n.n) || 1) - 1) } });
-    }
-    if(path === '/api/track/installed' && request.method === 'POST'){
-      const body = await request.json().catch(() => ({}));
-      const vid = neValidVid(body.vid);
-      if(!vid) return jsonResponse({ success: false, error: 'Invalid id' }, 400);
-      const how = body.how === 'installed' ? 'installed' : 'opened';
-      const platform = /^(android|ios|desktop|other)$/.test(String(body.platform || '')) ? String(body.platform) : 'other';
-      const now = new Date().toISOString();
-      await d1.prepare("INSERT INTO ne_app_installs (vid, how, platform, firstAt, lastAt) VALUES (?,?,?,?,?) ON CONFLICT(vid) DO UPDATE SET lastAt=excluded.lastAt")
-        .bind(vid, how, platform, now, now).run();
-      return jsonResponse({ success: true });
-    }
-  }catch(e){ return jsonResponse({ success: false, error: e.message }, 500); }
-  return null;
-}
-// Extra numbers for the Super Admin Live Status panel.
-async function neAlertStats(env){
-  const out = { appInstalls: 0, alertSubscribers: 0 };
-  try{
-    const d1 = env.NE_ENCYCLOPEDIA_D1; await nePushTables(d1);
-    const a = await d1.prepare("SELECT COUNT(*) AS n FROM ne_app_installs").first();
-    const s = await d1.prepare("SELECT COUNT(*) AS n FROM ne_push_subs").first();
-    out.appInstalls = (a && a.n) || 0; out.alertSubscribers = (s && s.n) || 0;
-  }catch(e){}
-  return out;
-}
-// ===== end NE ALERTS + APP INSTALLS =========================================
-
-// ===== SUPER ADMIN GOOGLE LOGIN (added) =====================================
-// The normal Google sign-in (and the private ?neadmin=1 box) opens the Super
-// Admin Dashboard for the owner's Gmail only; everyone else stays a contributor.
-// the address is stored as a one-way fingerprint (SHA-256), so the email is
-// never written in the code. Optional extra Gmails: Cloudflare variable
-// SUPER_ADMIN_EMAILS (comma separated). Password login is OFF; emergency
-// switch: Cloudflare variable ALLOW_PASSWORD_LOGIN = 1 turns it back on.
-const NE_SUPER_ADMIN_EMAIL_SHA256 = ['84c850721dfa9e5a87dc6fb1592faf7997edc3791b6c1c10b8eab95f8ff309c4'];
-async function neSha256Hex(s){
-  const b = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)));
-  return Array.from(b).map((x) => x.toString(16).padStart(2, '0')).join('');
-}
-async function neIsSuperAdminEmail(env, email){
-  email = String(email || '').trim().toLowerCase();
-  if(!email) return false;
-  const extra = String((env && env.SUPER_ADMIN_EMAILS) || '').toLowerCase().split(',').map((x) => x.trim()).filter(Boolean);
-  if(extra.includes(email)) return true;
-  return NE_SUPER_ADMIN_EMAIL_SHA256.includes(await neSha256Hex(email));
-}
-// Builds the Super Admin session for a verified Google account (g).
-async function neAdminTokenResponse(env, g){
-  const secret = getJwtSecret(env);
-  if(!secret) return jsonResponse({ success: false, error: 'JWT secret not configured' }, 500);
-  let user = null;
-  try{ const s = await env.NE_USERS_KV.get('user_benjamin'); if(s) user = JSON.parse(s); }catch(e){}
-  const now = Math.floor(Date.now() / 1000);
-  const payload = {
-    username: 'benjamin',
-    role: 'SUPER_ADMIN',
-    displayName: (user && user.displayName) || 'Ben Yanthan',
-    tokenVersion: (user && typeof user.tokenVersion === 'number') ? user.tokenVersion : 0,
-    via: 'google',
-    iat: now,
-    exp: now + 7 * 24 * 3600
-  };
-  const token = await signJWT(payload, secret);
-  const picture = (g && typeof g.picture === 'string' && /^https:\/\//.test(g.picture)) ? g.picture : '';
-  return new Response(JSON.stringify({ success: true, isAdmin: true, token, user: { username: payload.username, displayName: payload.displayName, role: payload.role, picture } }), {
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store',
-      'Set-Cookie': `ne_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 3600}` }
-  });
-}
-async function neAdminGoogleRoute(request, env){
-  try{
-    const body = await request.json().catch(() => ({}));
-    const g = await verifyGoogleIdToken(body.credential, NE_CONTRIB_GOOGLE_CLIENT_ID);
-    if(!g || g.email_verified !== true) return jsonResponse({ success: false, error: 'Google sign-in could not be verified' }, 401);
-    if(!(await neIsSuperAdminEmail(env, g.email))) return jsonResponse({ success: false, error: 'This Google account is not the Super Admin.' }, 403);
-    return await neAdminTokenResponse(env, g);
-  }catch(e){ return jsonResponse({ success: false, error: 'Login error: ' + e.message }, 500); }
-}
-// ===== end SUPER ADMIN GOOGLE LOGIN =========================================
-
 export default {
 
  async fetch(request, env, ctx){
   const url=new URL(request.url);
   const path=url.pathname;
-  { const neAR = await neAlertRoutes(request, env, ctx, url, path); if(neAR) return neAR; }
-  if(path==='/api/admin/google-signin' && request.method==='POST') return await neAdminGoogleRoute(request, env);
-  if(path==='/api/track/heartbeat' || path==='/api/admin/live-stats') neDrainSoon(env, ctx, url);
 
   if(request.method==='OPTIONS'){
     return new Response(null,{headers:{
@@ -1502,7 +1242,6 @@ export default {
         finalAuthorId, finalAuthorName, a.createdAt||new Date().toISOString(), new Date().toISOString(),
         1, existingArticle ? (Number(existingArticle.views)||0) : (Number(a.views)||0), JSON.stringify(a.relatedIds||[])
       ).run();
-      if(!existingArticle) await neQueueAlert(env, ctx, url, {kind:'article', itemId:a.id, title:'New article: '+a.title, body:a.intro||a.state||'', url:'/?article='+encodeURIComponent(a.id)});
       return jsonResponse({success:true,message:'Article saved to D1 online'});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
@@ -1599,7 +1338,6 @@ export default {
         w.id, w.word, w.language||'', w.tribe||'', w.state||'', w.meaning, w.example||'', w.pronunciation||'', w.altSpelling||'',
         finalContributor, finalSource, w.dateAdded||new Date().toISOString(), finalIsAnonymous
       ).run();
-      if(!existingWord) await neQueueAlert(env, ctx, url, {kind:'word', itemId:w.id, title:'New word: '+w.word, body:w.meaning+(w.language?' ('+w.language+')':''), url:'/?word='+encodeURIComponent(w.id)});
       return jsonResponse({success:true,message:'Word saved to D1 online'});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
@@ -1641,7 +1379,6 @@ export default {
         st.id, st.title, st.state||'', st.intro||'', st.content, finalAuthorId, finalAuthorName,
         neKeepImage(st.imageUrl, existingStory&&existingStory.imageUrl), st.imageCaption||'', st.imageCredit||'', st.createdAt||new Date().toISOString(), new Date().toISOString(), 1, finalIsAnonymous
       ).run();
-      if(!existingStory) await neQueueAlert(env, ctx, url, {kind:'story', itemId:st.id, title:'New story: '+st.title, body:st.intro||st.content||'', url:'/?story='+encodeURIComponent(st.id)});
       return jsonResponse({success:true,message:'Story saved to D1 online'});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
@@ -1755,7 +1492,6 @@ export default {
         t.festivals||'', t.food||'', t.clothing||'', t.arts||'', t.population||'', JSON.stringify(t.references||[]), neKeepImage(t.imageUrl, existing&&existing.imageUrl),
         (existing&&existing.createdAt)||t.createdAt||new Date().toISOString(), new Date().toISOString()
       ).run();
-      if(!existing) await neQueueAlert(env, ctx, url, {kind:'tribe', itemId:t.id, title:'New in Tribes & Communities: '+t.name, body:t.state||t.history||'', url:'/?tribe='+encodeURIComponent(t.id)});
       return jsonResponse({success:true,message:'Tribe saved to D1 online'});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
@@ -1808,7 +1544,6 @@ export default {
         (existing&&existing.authorId)||payload.username, (existing&&existing.authorName)||payload.displayName,
         (existing&&existing.createdAt)||p.createdAt||new Date().toISOString(), new Date().toISOString()
       ).run();
-      if(!existing) await neQueueAlert(env, ctx, url, {kind:'person', itemId:p.id, title:'New in People: '+p.name, body:[p.role,p.state].filter(Boolean).join(' \u2022 ')||p.bio||'', url:'/?person='+encodeURIComponent(p.id)});
       return jsonResponse({success:true,message:'Person saved to D1 online'});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
@@ -1861,7 +1596,6 @@ export default {
         (existing&&existing.authorId)||payload.username, (existing&&existing.authorName)||payload.displayName,
         (existing&&existing.createdAt)||pl.createdAt||new Date().toISOString(), new Date().toISOString()
       ).run();
-      if(!existing) await neQueueAlert(env, ctx, url, {kind:'place', itemId:pl.id, title:'New place: '+pl.name, body:[pl.type,pl.state].filter(Boolean).join(' \u2022 ')||pl.description||'', url:'/?place='+encodeURIComponent(pl.id)});
       return jsonResponse({success:true,message:'Place saved to D1 online'});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
@@ -1909,7 +1643,6 @@ export default {
         existing? existing.authorId : payload.username, m.authorName||payload.displayName,
         m.createdAt||new Date().toISOString(), new Date().toISOString(), 1
       ).run();
-      if(!existing) await neQueueAlert(env, ctx, url, {kind:'photo', itemId:m.id, title:'New photo: '+m.title, body:m.caption||m.category||'', url:'/?photo='+encodeURIComponent(m.id)});
       return jsonResponse({success:true,message:'Photo saved to D1 online'});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
@@ -1997,7 +1730,6 @@ export default {
       const updateSubmissionStmt = env.NE_ENCYCLOPEDIA_D1.prepare(
         "UPDATE submissions SET status='approved', articleId=? WHERE id=?"
       ).bind(newArticleId, subId);
-      let neApproveExisting = null; try{ neApproveExisting = await env.NE_ENCYCLOPEDIA_D1.prepare("SELECT id FROM articles WHERE id=?").bind(newArticleId).first(); }catch(e){}
       // Atomic: article creation and submission approval/linking either both commit or neither does.
       await env.NE_ENCYCLOPEDIA_D1.batch([insertArticleStmt, updateSubmissionStmt]);
       // NE CONTRIBUTOR V1: if this submission came from a contributor, bump their stats and log it.
@@ -2008,7 +1740,6 @@ export default {
         }catch(e){}
         await logContributorAudit(env.NE_ENCYCLOPEDIA_D1, payload.username||'SUPER_ADMIN', 'SUPER_ADMIN', 'submission_approved', subId, subResult.type);
       }
-      if(!neApproveExisting) await neQueueAlert(env, ctx, url, {kind:'article', itemId:newArticleId, title:'New article: '+(data.title||'Untitled'), body:data.intro||data.state||'', url:'/?article='+encodeURIComponent(newArticleId)});
       return jsonResponse({success:true,message:'Approved and published to D1',id:newArticleId});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
@@ -2260,8 +1991,6 @@ export default {
 
       const g = await verifyGoogleIdToken(credential, NE_CONTRIB_GOOGLE_CLIENT_ID);
       if(!g) return jsonResponse({success:false,error:'Google sign-in verification failed'},401);
-      // The owner's Gmail opens the Super Admin Dashboard instead of a contributor account.
-      if(g.email_verified===true && await neIsSuperAdminEmail(env, g.email)) return await neAdminTokenResponse(env, g);
 
       const googleSub = g.sub; // stable permanent identity - never use email as the id
       let row = await d1.prepare("SELECT * FROM contributors WHERE googleSub=?").bind(googleSub).first();
@@ -2292,7 +2021,7 @@ export default {
         role: 'CONTRIBUTOR',
         status: row.status,
         iat: Math.floor(Date.now()/1000),
-        exp: Math.floor(Date.now()/1000) + 30*24*3600
+        exp: Math.floor(Date.now()/1000) + 7*24*3600
       };
       const secret = getJwtSecret(env);
       const token = await signJWT(tokenPayload, secret);
@@ -2376,7 +2105,6 @@ export default {
           1, neExistingArt ? (Number(neExistingArt.views)||0) : (Number(a.views)||0), JSON.stringify(a.relatedIds||[])
         ).run();
         await logContributorAudit(d1, contributor.id, 'CONTRIBUTOR', body.articleId?'contributor_article_updated':'contributor_article_published', articleId, a.title);
-        if(!neExistingArt) await neQueueAlert(env, ctx, url, {kind:'article', itemId:articleId, title:'New article: '+a.title, body:a.intro||a.state||'', url:'/?article='+encodeURIComponent(articleId)});
         return jsonResponse({success:true, id:articleId, message:'Published to D1'});
       }
 
@@ -2388,10 +2116,8 @@ export default {
         if(!w.word) return jsonResponse({success:false,error:'Word is required'},400);
         if(!w.meaning) return jsonResponse({success:false,error:'Meaning is required'},400);
         let wordId = body.articleId || w.id;
-        let neWordIsNew = true;
         if(wordId){
           const existingWord = await d1.prepare("SELECT contributor FROM dictionary WHERE id=?").bind(wordId).first();
-          if(existingWord) neWordIsNew = false;
           if(existingWord && existingWord.contributor !== contributor.id) return jsonResponse({success:false,error:'You can only edit your own content'},403);
         } else {
           wordId = 'w'+Date.now()+Math.random().toString(36).slice(2,6);
@@ -2403,7 +2129,6 @@ export default {
           contributor.id, w.source||contributor.displayName, w.dateAdded||new Date().toISOString(), w.isAnonymous?1:0
         ).run();
         await logContributorAudit(d1, contributor.id, 'CONTRIBUTOR', body.articleId?'contributor_word_updated':'contributor_word_published', wordId, w.word);
-        if(neWordIsNew) await neQueueAlert(env, ctx, url, {kind:'word', itemId:wordId, title:'New word: '+w.word, body:w.meaning+(w.language?' ('+w.language+')':''), url:'/?word='+encodeURIComponent(wordId)});
         return jsonResponse({success:true, id:wordId, message:'Published to D1'});
       }
 
@@ -2430,7 +2155,6 @@ export default {
           neKeepImage(st.imageUrl, neExistingStory&&neExistingStory.imageUrl), st.imageCaption||'', st.imageCredit||'', st.createdAt||new Date().toISOString(), new Date().toISOString(), 1, st.isAnonymous?1:0
         ).run();
         await logContributorAudit(d1, contributor.id, 'CONTRIBUTOR', body.articleId?'contributor_story_updated':'contributor_story_published', storyId, st.title);
-        if(!neExistingStory) await neQueueAlert(env, ctx, url, {kind:'story', itemId:storyId, title:'New story: '+st.title, body:st.intro||st.content||'', url:'/?story='+encodeURIComponent(storyId)});
         return jsonResponse({success:true, id:storyId, message:'Published to D1'});
       }
 
@@ -2636,80 +2360,6 @@ export default {
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
 
-  // --- Super Admin: WHO liked / disliked / commented. Reactions only store an
-  // actorKey ('c:'+contributorId or 'a:'+username), so names are resolved here
-  // from the contributors table. Comments already store the real actor. Both
-  // routes are SUPER_ADMIN-only (verified JWT), never exposed to visitors. ---
-  async function neIsSuperAdmin(request, env){
-    const token = getTokenFromRequest(request);
-    const payload = token ? await verifyJWT(token, getJwtSecret(env), env) : null;
-    return !!(payload && payload.role==='SUPER_ADMIN');
-  }
-  async function neActorNames(d1, keys){
-    const out = {};
-    const ids = [...new Set(keys.filter((k)=>typeof k==='string' && k.startsWith('c:')).map((k)=>k.slice(2)))];
-    for(let i=0;i<ids.length;i+=50){
-      const part = ids.slice(i,i+50);
-      const rows = await d1.prepare("SELECT id,displayName,email FROM contributors WHERE id IN ("+part.map(()=>'?').join(',')+")").bind(...part).all();
-      for(const r of (rows.results||[])) out['c:'+r.id] = {name:r.displayName||'Contributor', email:r.email||'', type:'contributor'};
-    }
-    for(const k of keys){ if(typeof k==='string' && k.startsWith('a:') && !out[k]) out[k] = {name:k.slice(2), email:'', type:'admin'}; }
-    return out;
-  }
-  if(path==='/api/admin/engagement/who' && request.method==='GET'){
-    try{
-      if(!(await neIsSuperAdmin(request, env))) return jsonResponse({success:false,error:'SUPER_ADMIN only'},403);
-      if(!env.NE_ENCYCLOPEDIA_D1) return jsonResponse({success:false,error:'D1 not configured'},500);
-      const d1 = env.NE_ENCYCLOPEDIA_D1;
-      await initD1Tables(d1);
-      const contentType = url.searchParams.get('contentType');
-      const contentId = (url.searchParams.get('contentId')||'').toString();
-      if(!NE_ENGAGEMENT_CONTENT_TYPES.includes(contentType) || !contentId) return jsonResponse({success:false,error:'contentType and contentId required'},400);
-      const rx = await d1.prepare("SELECT actorKey,reactionType,createdAt FROM reactions WHERE contentType=? AND contentId=? ORDER BY createdAt DESC").bind(contentType,contentId).all();
-      const rows = rx.results||[];
-      const names = await neActorNames(d1, rows.map((r)=>r.actorKey));
-      const cm = await d1.prepare("SELECT id,actorId,actorType,displayName,isAnonymous,text,createdAt FROM comments WHERE contentType=? AND contentId=? AND deletedAt IS NULL ORDER BY createdAt DESC").bind(contentType,contentId).all();
-      return jsonResponse({success:true,
-        reactions: rows.map((r)=>({type:r.reactionType, name:(names[r.actorKey]||{}).name||r.actorKey, email:(names[r.actorKey]||{}).email||'', actorType:(names[r.actorKey]||{}).type||'', createdAt:r.createdAt})),
-        comments: (cm.results||[]).map((r)=>({id:r.id, name:r.displayName, actorType:r.actorType, isAnonymous:!!r.isAnonymous, text:r.text, createdAt:r.createdAt}))
-      });
-    }catch(e){ return jsonResponse({success:false,error:e.message},500); }
-  }
-  if(path==='/api/admin/engagement/recent' && request.method==='GET'){
-    try{
-      if(!(await neIsSuperAdmin(request, env))) return jsonResponse({success:false,error:'SUPER_ADMIN only'},403);
-      if(!env.NE_ENCYCLOPEDIA_D1) return jsonResponse({success:false,error:'D1 not configured'},500);
-      const d1 = env.NE_ENCYCLOPEDIA_D1;
-      await initD1Tables(d1);
-      const lim = Math.max(10, Math.min(300, Number(url.searchParams.get('limit'))||150));
-      const rx = (await d1.prepare("SELECT contentType,contentId,actorKey,reactionType,createdAt FROM reactions ORDER BY createdAt DESC LIMIT ?").bind(lim).all()).results||[];
-      const cm = (await d1.prepare("SELECT id,contentType,contentId,displayName,actorType,isAnonymous,text,createdAt FROM comments WHERE deletedAt IS NULL ORDER BY createdAt DESC LIMIT ?").bind(lim).all()).results||[];
-      const names = await neActorNames(d1, rx.map((r)=>r.actorKey));
-      // titles of the liked/commented items, one query per content type
-      const want = {};
-      for(const r of [...rx,...cm]){ (want[r.contentType] = want[r.contentType] || new Set()).add(String(r.contentId)); }
-      const titleSql = {article:["articles","title"], story:["stories","title"], word:["dictionary","word"], media:["media","title"]};
-      const titles = {};
-      for(const t of Object.keys(want)){
-        const ts = titleSql[t]; if(!ts) continue;
-        const ids = [...want[t]];
-        for(let i=0;i<ids.length;i+=50){
-          const part = ids.slice(i,i+50);
-          try{
-            const rows = await d1.prepare("SELECT id,"+ts[1]+" AS t FROM "+ts[0]+" WHERE id IN ("+part.map(()=>'?').join(',')+")").bind(...part).all();
-            for(const r of (rows.results||[])) titles[t+':'+r.id] = r.t;
-          }catch(e){}
-        }
-      }
-      const items = [
-        ...rx.map((r)=>({kind:r.reactionType, contentType:r.contentType, contentId:r.contentId, title:titles[r.contentType+':'+r.contentId]||'', name:(names[r.actorKey]||{}).name||r.actorKey, email:(names[r.actorKey]||{}).email||'', actorType:(names[r.actorKey]||{}).type||'', createdAt:r.createdAt})),
-        ...cm.map((r)=>({kind:'comment', contentType:r.contentType, contentId:r.contentId, title:titles[r.contentType+':'+r.contentId]||'', name:r.displayName, actorType:r.actorType, isAnonymous:!!r.isAnonymous, text:r.text, createdAt:r.createdAt}))
-      ].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).slice(0, lim);
-      const counts = {like:rx.filter((r)=>r.reactionType==='like').length, dislike:rx.filter((r)=>r.reactionType==='dislike').length, comment:cm.length};
-      return jsonResponse({success:true, items, counts});
-    }catch(e){ return jsonResponse({success:false,error:e.message},500); }
-  }
-
   // --- Visitor/session heartbeat. Public (works for anonymous visitors);
   // if a valid token IS present, the verified identity always overrides
   // whatever the client claims about itself. Elapsed time since this
@@ -2730,20 +2380,6 @@ export default {
       const actor = await neResolveActor(request, env);
       if(actor && actor.actorType==='contributor'){ userType='contributor'; contributorId=actor.actorId; }
       else if(actor && actor.actorType==='admin'){ userType='admin'; }
-      let renewedToken = null;
-      if(contributorId){
-        try{
-          const neSecret = getJwtSecret(env);
-          const neOld = await verifyJWT(getTokenFromRequest(request), neSecret, env);
-          const neNowS = Math.floor(Date.now()/1000);
-          if(neOld && neOld.role==='CONTRIBUTOR' && (!neOld.iat || neNowS-neOld.iat > 6*3600)){
-            const neRow = await d1.prepare("SELECT id,googleSub,displayName,status FROM contributors WHERE id=?").bind(contributorId).first();
-            if(neRow && neRow.status==='ACTIVE'){
-              renewedToken = await signJWT({contributorId:neRow.id, googleSub:neRow.googleSub, displayName:neRow.displayName, role:'CONTRIBUTOR', status:neRow.status, iat:neNowS, exp:neNowS+30*24*3600}, neSecret);
-            }
-          }
-        }catch(e){ renewedToken = null; }
-      }
 
       const now = new Date();
       const nowIso = now.toISOString();
@@ -2759,9 +2395,9 @@ export default {
           .bind(sessionId, userType, contributorId, nowIso, nowIso).run();
       }
       if(contributorId){
-        try{ await d1.prepare("UPDATE contributors SET lastActiveAt=? WHERE id=? AND (lastActiveAt IS NULL OR lastActiveAt<?)").bind(nowIso, contributorId, new Date(now.getTime()-60000).toISOString()).run(); }catch(e){}
+        try{ await d1.prepare("UPDATE contributors SET lastActiveAt=? WHERE id=?").bind(nowIso, contributorId, new Date(now.getTime()-60000).toISOString()).run(); }catch(e){}
       }
-      return jsonResponse(renewedToken ? {success:true, token:renewedToken, tokenFor:'contributor'} : {success:true});
+      return jsonResponse({success:true});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
 
@@ -2786,19 +2422,13 @@ export default {
       const totalUsers = (totalRow && totalRow.n) || 0;
       const totalTimeSeconds = (totalRow && totalRow.total) || 0;
       const avgTimeSeconds = totalUsers>0 ? Math.round(totalTimeSeconds/totalUsers) : 0;
-      const content = {};
-      for(const [k,t] of [["contributors","contributors"],["articles","articles"],["dictionary","dictionary"],["stories","stories"],["tribes","tribes"],["media","media"]]){
-        try{ const r0 = await d1.prepare("SELECT COUNT(*) as n FROM "+t).first(); content[k] = (r0&&r0.n)||0; }catch(e){}
-      }
       return jsonResponse({success:true, stats:{
         onlineNow: (onlineNowRow&&onlineNowRow.n)||0,
         contributorsOnline: (contributorsOnlineRow&&contributorsOnlineRow.n)||0,
         usersToday: (todayRow&&todayRow.n)||0,
         totalUsers,
         totalTimeSeconds,
-        avgTimeSeconds,
-        content,
-        ...(await neAlertStats(env))
+        avgTimeSeconds
       }});
     }catch(e){ return jsonResponse({success:false,error:e.message},500); }
   }
@@ -3535,8 +3165,6 @@ export default {
   // ================= END NE CONTRIBUTOR V1 =================
 
   if(path==='/api/login' && request.method==='POST'){
-    // Super Admin signs in with Google only. Emergency: set Cloudflare variable ALLOW_PASSWORD_LOGIN = 1.
-    if(String((env && env.ALLOW_PASSWORD_LOGIN) || '') !== '1') return jsonResponse({success:false,error:'Password login is turned off. Please sign in with Google.'},403);
     try{
       const body=await request.json().catch(()=>({}));
       const username=(body.username||'').toString().trim().toLowerCase();
